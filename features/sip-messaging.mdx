@@ -1,0 +1,313 @@
+---
+title: 'SIP Messaging (Centro de Mensajes)'
+description: 'Enable text messaging between SIP extensions using MESSAGE support'
+icon: 'message'
+---
+
+Asterisk supports sending text messages between SIP extensions using the SIP MESSAGE method. This guide shows how to configure a message center that routes messages between users.
+
+<Note>
+  This is **not** instant messaging - it's SIP MESSAGE support for sending text between extensions. Message delivery depends on the recipient being registered.
+</Note>
+
+## Overview
+
+The message center configuration:
+- Accepts out-of-call SIP messages
+- Routes messages between extensions
+- Adds sender information to message body
+- Handles delivery failures
+- Supports presence/subscription
+
+## Configuration
+
+### sip.conf
+
+Enable SIP messaging in the general section:
+
+<Accordion title="SIP message configuration">
+  ```ini
+  [general]
+  port=5060
+  directmedia=no
+  language=es
+  ;-----Para los mensajes-----
+  accept_outofcall_message=yes
+  outofcall_message_context=mensajes
+  auth_message_requests=yes
+  subscribecontext=suscribir
+  ```
+</Accordion>
+
+**Configuration parameters:**
+- `accept_outofcall_message=yes` - Accept messages outside of active calls
+- `outofcall_message_context=mensajes` - Context for processing messages
+- `auth_message_requests=yes` - Require authentication for messages
+- `subscribecontext=suscribir` - Context for presence subscriptions
+
+### extensions.conf
+
+Configure the message routing dialplan:
+
+<Steps>
+  <Step title="Add subscription context">
+    Define hints for presence/subscription:
+    
+    ```ini
+    [suscribir]
+    exten => 4000,hint,SIP/javier
+    exten => 4001,hint,SIP/belen
+    ```
+  </Step>
+
+  <Step title="Create message processing context">
+    Add the main message routing logic:
+    
+    ```ini
+    [mensajes]
+    exten => _X.,1,NoOp(Mensaje de ${MESSAGE(from)})
+    same => n,NoOp(Mensaje para ${MESSAGE(to)})
+    same => n,NoOp(Cuerpo del mensaje: ${MESSAGE(body)})
+    same => n,Set(dest=${EXTEN})
+    same => n,Set(remitente=${CUT(MESSAGE(from),<,2)})
+    same => n,Set(remitente=${CUT(remitente,@,1)})
+    same => n,Set(remitente=${CUT(remitente,:,2)})
+    same => n,Set(texto=${MESSAGE(body)})
+    same => n,Set(MESSAGE(body)=${remitente}: ${texto})
+    same => n,GotoIf($["${EXTEN}" = "4000"]?4000)
+    same => n,GotoIf($["${EXTEN}" = "4001"]?4001)
+    same => n,MessageSend(${EXTEN}, Centro de Mensajes(CdM))
+    same => n,Noop(Estado del mensaje ${MESSAGE_SEND_STATUS})
+    same => n,GotoIf($["${MESSAGE_SEND_STATUS}" != "SUCCESS"]?fallo,s,1)
+    same => n,Hangup()
+    ```
+  </Step>
+
+  <Step title="Add extension-specific routing">
+    Handle specific extensions:
+    
+    ```ini
+    exten => 4000,4000,NoOp(Mensaje a Javier)
+    same => n,MessageSend(sip:javier, Centro de Mensajes(CdM))
+    same => n,Noop(Estado del mensaje ${MESSAGE_SEND_STATUS})
+    same => n,GotoIf($["${MESSAGE_SEND_STATUS}" != "SUCCESS"]?fallo,s,1)
+    same => n,Hangup()
+
+    exten => 4001,4001,NoOp(Mensaje a Belen)
+    same => n,MessageSend(sip:belen, Centro de Mensajes(CdM))
+    same => n,Noop(Estado del mensaje ${MESSAGE_SEND_STATUS})
+    same => n,GotoIf($["${MESSAGE_SEND_STATUS}" != "SUCCESS"]?fallo,s,1)
+    same => n,Hangup()
+    ```
+  </Step>
+
+  <Step title="Add failure handling">
+    Create a failure context:
+    
+    ```ini
+    [fallo]
+    exten => s,1,Set(MESSAGE(body)=CdM: El mensaje "${texto}" para ${dest} no ha sido enviado)
+    same => n,Set(remit=${CUT(MESSAGE(from),<,2)})
+    same => n,Set(remit=${CUT(remit,@,1)})
+    same => n,MessageSend(${remit},Centro de Mensajes(CdM))
+    same => n,NoOp(Estado del mensaje ${MESSAGE_SEND_STATUS})
+    same => n,Hangup()
+    ```
+  </Step>
+</Steps>
+
+## How It Works
+
+<Accordion title="Message flow diagram">
+  1. **User sends message** → Message enters `mensajes` context
+  2. **Extract sender** → Parse sender from MESSAGE(from) header
+  3. **Prepend sender to body** → Format: "sender: message text"
+  4. **Route to extension** → Check destination and route accordingly
+  5. **Send message** → Use MessageSend() to deliver
+  6. **Check status** → If failed, notify sender via `fallo` context
+</Accordion>
+
+### Dialplan Functions Explained
+
+<AccordionGroup>
+  <Accordion title="Pattern matching">
+    ```ini
+    exten => _X.,1,NoOp(...)
+    ```
+    - `_X.` matches any numeric extension
+    - X = any digit (0-9)
+    - . = one or more additional digits
+  </Accordion>
+
+  <Accordion title="MESSAGE() function">
+    Access SIP MESSAGE headers:
+    - `${MESSAGE(from)}` - Sender's SIP URI
+    - `${MESSAGE(to)}` - Recipient's SIP URI
+    - `${MESSAGE(body)}` - Message text content
+  </Accordion>
+
+  <Accordion title="CUT() function">
+    Extract parts of strings:
+    ```ini
+    Set(remitente=${CUT(MESSAGE(from),<,2)})
+    ```
+    - Splits string on `<` delimiter
+    - Takes field 2
+    - Used to extract username from SIP URI
+  </Accordion>
+
+  <Accordion title="MessageSend()">
+    Send message to destination:
+    ```ini
+    MessageSend(sip:javier, Centro de Mensajes(CdM))
+    ```
+    - First parameter: destination
+    - Second parameter: sender display name
+  </Accordion>
+</AccordionGroup>
+
+## Reload Configuration
+
+After editing configuration files:
+
+```
+CLI> dialplan reload
+CLI> sip reload
+```
+
+## Testing
+
+<Steps>
+  <Step title="Send message from Belen to Javier">
+    In Belen's softphone:
+    - Select extension 4000
+    - Choose "Send Message" option
+    - Type message: "Hola Javier"
+    - Send
+  </Step>
+
+  <Step title="Javier receives message">
+    Javier sees message in his softphone:
+    ```
+    4001: Hola Javier
+    ```
+    Note that the sender's extension is prepended.
+  </Step>
+
+  <Step title="Test failure case">
+    Send message to non-existent extension (e.g., 9999):
+    - Sender receives failure notification:
+    ```
+    CdM: El mensaje "Test" para 9999 no ha sido enviado
+    ```
+  </Step>
+</Steps>
+
+## Console Output Examples
+
+<CodeGroup>
+  ```text Successful message
+  -- Executing [4000@mensajes:1] NoOp("Message/ast_msg_queue", "Mensaje de sip:belen@192.168.1.180") in new stack
+  -- Executing [4000@mensajes:2] NoOp("Message/ast_msg_queue", "Mensaje para sip:4000@192.168.1.180") in new stack
+  -- Executing [4000@mensajes:3] NoOp("Message/ast_msg_queue", "Cuerpo del mensaje: Hola Javier") in new stack
+  -- Executing [4000@mensajes:9] MessageSend("Message/ast_msg_queue", "sip:javier, Centro de Mensajes(CdM)") in new stack
+  -- Executing [4000@mensajes:10] NoOp("Message/ast_msg_queue", "Estado del mensaje SUCCESS") in new stack
+  ```
+
+  ```text Failed message
+  -- Executing [9999@mensajes:1] NoOp("Message/ast_msg_queue", "Mensaje de sip:javier@192.168.1.180") in new stack
+  -- Executing [9999@mensajes:9] MessageSend("Message/ast_msg_queue", "9999, Centro de Mensajes(CdM)") in new stack
+  -- Executing [9999@mensajes:10] NoOp("Message/ast_msg_queue", "Estado del mensaje FAILURE") in new stack
+  -- Executing [s@fallo:1] Set("Message/ast_msg_queue", "MESSAGE(body)=CdM: El mensaje "Test" para 9999 no ha sido enviado") in new stack
+  ```
+</CodeGroup>
+
+## SIP Client Configuration
+
+Ensure your SIP client supports SIP MESSAGE:
+
+<Accordion title="Tested softphones">
+  - **Blink** - Full support for SIP messaging
+  - **Zoiper** - Supports text messaging
+  - **Linphone** - SIP MESSAGE support
+  - **MicroSIP** - Basic text message support
+</Accordion>
+
+## Advanced Configuration
+
+### Adding More Users
+
+To add additional users to the message center:
+
+<Steps>
+  <Step title="Add to subscription context">
+    ```ini
+    [suscribir]
+    exten => 4002,hint,SIP/carlos
+    ```
+  </Step>
+
+  <Step title="Add routing logic">
+    ```ini
+    [mensajes]
+    exten => _X.,n,GotoIf($["${EXTEN}" = "4002"]?4002)
+    
+    exten => 4002,4002,NoOp(Mensaje a Carlos)
+    same => n,MessageSend(sip:carlos, Centro de Mensajes(CdM))
+    same => n,Noop(Estado del mensaje ${MESSAGE_SEND_STATUS})
+    same => n,GotoIf($["${MESSAGE_SEND_STATUS}" != "SUCCESS"]?fallo,s,1)
+    same => n,Hangup()
+    ```
+  </Step>
+</Steps>
+
+### Message Logging
+
+Log all messages to a file:
+
+```ini
+[mensajes]
+exten => _X.,1,NoOp(Mensaje de ${MESSAGE(from)})
+same => n,System(echo "${STRFTIME(${EPOCH},%Y-%m-%d %H:%M:%S)} - From: ${MESSAGE(from)} To: ${MESSAGE(to)} Body: ${MESSAGE(body)}" >> /var/log/asterisk/messages.log)
+same => n,Set(dest=${EXTEN})
+; ... rest of configuration
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Messages not being received">
+    - Verify recipient is registered: `CLI> sip show peers`
+    - Check that `accept_outofcall_message=yes` in sip.conf
+    - Ensure contexts match between sip.conf and extensions.conf
+    - Reload configuration: `sip reload` and `dialplan reload`
+  </Accordion>
+
+  <Accordion title="Sender information not showing">
+    - Check the `CUT()` function logic for parsing sender URI
+    - Verify MESSAGE(from) contains expected format
+    - Review console output with verbose logging: `CLI> core set verbose 5`
+  </Accordion>
+
+  <Accordion title="All messages failing">
+    - Check Asterisk version supports MessageSend()
+    - Verify chan_pjsip or chan_sip module is loaded
+    - Review failure context logic in `[fallo]`
+    - Check network connectivity between endpoints
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+<Note>
+  - Always use `auth_message_requests=yes` to prevent unauthorized messages
+  - Consider implementing rate limiting for message floods
+  - Log messages for audit purposes
+  - Use TLS/SRTP for encrypted message transport
+</Note>
+
+## Next Steps
+
+- Configure [Call Groups](/features/call-groups) for team calling
+- Set up [Call Pickup](/features/call-pickup) functionality
+- Learn about [Voicemail](/features/voicemail) configuration

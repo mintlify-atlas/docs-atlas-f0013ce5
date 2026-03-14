@@ -1,0 +1,222 @@
+---
+title: Asterisk Installation
+description: Complete guide to installing and compiling Asterisk 15.7.1 on Debian with all dependencies
+---
+
+This guide walks through installing Asterisk 15.7.1 from source on Debian. Compiling from source gives you full control over modules and features.
+
+## System Requirements
+
+This tutorial uses:
+- **OS**: Debian 9.11 (Stretch) without GUI
+- **Asterisk**: Version 15.7.1
+- **Hypervisor**: VMware Workstation 14 Player (Bridged networking)
+- **Shell**: GNU bash 4.4.12
+
+<Note>
+If you need sudo privileges, install and configure it first:
+
+```bash
+su
+apt-get install sudo
+adduser username sudo
+```
+</Note>
+
+## Update System
+
+Before installation, ensure your system is up to date:
+
+```bash
+sudo apt update && sudo apt upgrade
+```
+
+Install essential build tools:
+
+```bash
+sudo apt install wget build-essential subversion
+```
+
+## Download Asterisk
+
+Download and extract Asterisk source code:
+
+<Steps>
+
+<Step title="Navigate to Source Directory">
+```bash
+cd /usr/src/
+```
+</Step>
+
+<Step title="Download Asterisk">
+```bash
+sudo wget http://downloads.asterisk.org/pub/telephony/asterisk/releases/asterisk-15.7.1.tar.gz
+```
+</Step>
+
+<Step title="Extract Archive">
+```bash
+sudo tar zxf asterisk-15.7.1.tar.gz
+```
+</Step>
+
+<Step title="Enter Directory">
+```bash
+cd asterisk-15.7.1/
+```
+</Step>
+
+</Steps>
+
+## Install Dependencies
+
+Asterisk has several dependencies that must be installed:
+
+### MP3 Support
+
+```bash
+sudo contrib/scripts/get_mp3_source.sh
+```
+
+### Install Prerequisites
+
+Asterisk provides a script to install all required dependencies:
+
+```bash
+sudo contrib/scripts/install_prereq install
+```
+
+This script will:
+- Detect your distribution
+- Install all necessary packages
+- Configure your system for Asterisk
+
+<Note>
+During installation, you may be prompted for your country code for phone number formatting. Select your appropriate country.
+</Note>
+
+## Compile Asterisk
+
+### Configure Build
+
+Prepare the source code for compilation:
+
+```bash
+sudo ./configure
+```
+
+Once complete, you'll see a success message with the Asterisk logo.
+
+### Select Modules
+
+Asterisk's menu selection interface lets you choose which modules to compile:
+
+```bash
+sudo make menuselect
+```
+
+This opens an interactive menu where you can:
+- Enable/disable specific modules
+- Select sound file formats
+- Configure codec support
+- Enable additional features
+
+<Note>
+Use arrow keys to navigate, **Enter** to select categories, **Space** to toggle options, and **Escape** to exit and save.
+</Note>
+
+### Compile Source
+
+Compile Asterisk with multiple CPU cores for faster compilation:
+
+```bash
+sudo make -j2
+```
+
+The `-j2` flag uses 2 CPU cores. Adjust based on your available resources:
+- `-j2` for 2 cores
+- `-j4` for 4 cores
+- `-j8` for 8 cores
+
+<Warning>
+Compilation can take 15-30 minutes depending on your hardware and selected modules.
+</Warning>
+
+## Install Asterisk
+
+### Install Binaries
+
+Install the compiled Asterisk binaries:
+
+```bash
+sudo make install
+```
+
+### Install Configuration Files
+
+Install sample configuration files:
+
+```bash
+sudo make samples
+```
+
+This creates configuration files in `/etc/asterisk/` that you'll customize later.
+
+### Install Init Scripts
+
+Install startup scripts and system configuration:
+
+```bash
+sudo make config
+```
+
+### Update Library Cache
+
+Update the shared library cache:
+
+```bash
+sudo ldconfig
+```
+
+## Optional: Install Documentation
+
+Generate and install Asterisk documentation:
+
+```bash
+sudo make progdocs
+```
+
+## Verify Installation
+
+Check that Asterisk was installed successfully:
+
+```bash
+asterisk -V
+```
+
+You should see output similar to:
+```
+Asterisk 15.7.1
+```
+
+## Configuration File Locations
+
+Key Asterisk directories:
+
+- **Configuration**: `/etc/asterisk/`
+- **Modules**: `/usr/lib/asterisk/modules/`
+- **Sounds**: `/var/lib/asterisk/sounds/`
+- **Logs**: `/var/log/asterisk/`
+- **Spool**: `/var/spool/asterisk/`
+
+## Next Steps
+
+With Asterisk installed:
+1. [Create a dedicated asterisk user](/setup/user-creation) for security
+2. [Configure Spanish language support](/setup/language-configuration)
+3. Start configuring your PBX
+
+<Note>
+Don't start Asterisk yet! First, create a dedicated user account to run Asterisk securely (see next section).
+</Note>

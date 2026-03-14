@@ -1,0 +1,257 @@
+---
+title: Call Security with TLS
+description: Encrypt SIP calls using TLS certificates for secure communications
+---
+
+Secure your Asterisk communications by implementing TLS (Transport Layer Security) encryption for SIP calls. This protects voice traffic from eavesdropping.
+
+## Overview
+
+TLS encryption requires:
+- A Certificate Authority (CA) certificate
+- Server certificates for Asterisk
+- Client certificates for SIP devices
+
+<Warning>
+This implementation should be done after [integrating Asterisk with MariaDB](/database/mariadb-installation).
+</Warning>
+
+## Creating Certificates
+
+### Create Keys Directory
+
+```bash
+sudo mkdir /etc/asterisk/keys
+```
+
+### Generate CA and Server Certificates
+
+Asterisk provides the `ast_tls_cert` script for certificate generation:
+
+```bash
+cd /usr/src/asterisk-15.7.1/contrib/scripts/
+sudo ./ast_tls_cert -C 192.168.1.180 -O "Tutorial Asterisk" -d /etc/asterisk/keys
+```
+
+**Parameters:**
+- `-C`: Your server hostname or IP address
+- `-O`: Your organization name
+- `-d`: Output directory for certificates
+
+You'll be prompted for a passphrase. Remember it - you'll need it for client certificates.
+
+**Example:** `"Esto es un tutorial Asterisk"`
+
+Verify the certificates were created:
+
+```bash
+ls -l /etc/asterisk/keys/
+```
+
+You should see:
+- `ca.crt` - Certificate Authority certificate
+- `ca.key` - CA private key
+- `asterisk.pem` - Server certificate
+- `asterisk.key` - Server private key
+
+### Generate Client Certificates
+
+Create a certificate for each SIP client:
+
+```bash
+sudo ./ast_tls_cert -m client \
+  -c /etc/asterisk/keys/ca.crt \
+  -k /etc/asterisk/keys/ca.key \
+  -C 192.168.1.180 \
+  -O "Tutorial Asterisk" \
+  -d /etc/asterisk/keys \
+  -o javier
+```
+
+**Parameters:**
+- `-m client`: Generate a client certificate
+- `-c`: Path to CA certificate
+- `-k`: Path to CA private key
+- `-C`: Client hostname or IP
+- `-O`: Organization name
+- `-o`: Certificate name (username)
+
+Enter the CA passphrase when prompted.
+
+Verify the client certificates:
+
+```bash
+ls -l /etc/asterisk/keys/
+```
+
+You'll see:
+- `javier.crt` - Client certificate
+- `javier.pem` - Client certificate and key bundle
+
+<Info>
+The `.pem` file contains both the certificate and private key. This is what you'll install on the SIP client.
+</Info>
+
+## Configuring Asterisk for TLS
+
+### Update sip.conf
+
+Add TLS settings to the `[general]` section:
+
+```conf
+[general]
+port=5060
+directmedia=no
+language=es
+context=public
+
+; TLS Configuration
+tlsenable=yes
+tlsbindaddr=0.0.0.0
+tlscertfile=/etc/asterisk/keys/asterisk.pem
+tlscafile=/etc/asterisk/keys/ca.crt
+tlscipher=ALL
+tlsclientmethod=tlsv1
+```
+
+### Configure User for TLS
+
+For users with TLS certificates, add the `transport=tls` directive:
+
+```conf
+[javier]
+type=friend
+secret=310195
+context=empleado
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+callgroup=2
+pickupgroup=2
+transport=tls
+```
+
+Users without certificates use UDP:
+
+```conf
+[belen]
+type=friend
+secret=120995
+context=empleado
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+callgroup=2
+pickupgroup=2
+```
+
+Reload SIP configuration:
+
+```
+CLI> sip reload
+```
+
+## Verifying TLS Configuration
+
+Check the allowed transports for each peer:
+
+```
+CLI> sip show peer javier
+CLI> sip show peer belen
+```
+
+- **javier** should show: `Transport: TLS`
+- **belen** should show: `Transport: UDP`
+
+## Configuring Blink SIP Client
+
+<Steps>
+  <Step title="Download the client certificate">
+    Transfer `javier.pem` from the Asterisk server to your client machine using SFTP or SCP.
+  </Step>
+
+  <Step title="Create account in Blink">
+    Open Blink and create a new SIP account:
+    - **Address:** javier@192.168.1.180
+    - **Password:** 310195
+  </Step>
+
+  <Step title="Configure TLS settings">
+    In account settings:
+    1. Go to **Server Settings**
+    2. Enable **TLS**
+    3. Set **Transport:** TLS
+    4. Browse and select the `javier.pem` certificate file
+  </Step>
+
+  <Step title="Verify connection">
+    The account should register successfully. In Asterisk CLI:
+
+    ```
+    CLI> sip show tcp
+    CLI> sip show peers
+    ```
+
+    You should see javier connected via TLS.
+  </Step>
+</Steps>
+
+<CodeGroup>
+```conf TLS Server Config
+[general]
+tlsenable=yes
+tlsbindaddr=0.0.0.0
+tlscertfile=/etc/asterisk/keys/asterisk.pem
+tlscafile=/etc/asterisk/keys/ca.crt
+tlscipher=ALL
+tlsclientmethod=tlsv1
+```
+
+```conf TLS User
+[javier]
+type=friend
+secret=310195
+context=empleado
+host=dynamic
+transport=tls
+```
+
+```bash Generate Certificates
+# CA and server certs
+sudo ./ast_tls_cert -C 192.168.1.180 -O "My Company" -d /etc/asterisk/keys
+
+# Client cert
+sudo ./ast_tls_cert -m client \
+  -c /etc/asterisk/keys/ca.crt \
+  -k /etc/asterisk/keys/ca.key \
+  -C 192.168.1.180 \
+  -O "My Company" \
+  -d /etc/asterisk/keys \
+  -o username
+```
+</CodeGroup>
+
+<Warning>
+Keep your private keys (`*.key` files) secure. Never share them or commit them to version control.
+</Warning>
+
+## Troubleshooting
+
+If TLS connections fail:
+
+1. **Check certificate permissions:**
+   ```bash
+   ls -l /etc/asterisk/keys/
+   ```
+
+2. **Verify TLS is enabled:**
+   ```
+   CLI> sip show settings
+   ```
+
+3. **Check firewall allows port 5061** (default TLS port)
+
+4. **Review Asterisk logs:**
+   ```bash
+   tail -f /var/log/asterisk/messages
+   ```

@@ -1,0 +1,425 @@
+---
+title: "sip.conf Configuration"
+description: "Complete reference for configuring the SIP channel driver in Asterisk"
+---
+
+## Overview
+
+The `sip.conf` file configures the SIP (Session Initiation Protocol) channel driver in Asterisk. This file defines global SIP settings, peer/friend definitions, and security options including TLS encryption.
+
+## File Location
+
+```
+/etc/asterisk/sip.conf
+```
+
+## File Structure
+
+The configuration file consists of sections defined by brackets:
+- **[general]** - Global SIP settings
+- **[authentication]** - Authentication credentials
+- **[peer/friend definitions]** - Individual SIP endpoints
+- **[templates]** - Reusable configuration templates
+
+## General Section
+
+The `[general]` section defines global SIP channel driver settings.
+
+<CodeGroup>
+```ini Basic Configuration
+[general]
+port=5060
+directmedia=no
+language=es
+context=public
+allowoverlap=no
+udpbindaddr=0.0.0.0
+tcpenable=no
+tcpbindaddr=0.0.0.0
+transport=udp
+srvlookup=yes
+```
+
+```ini TLS Encryption
+[general]
+port=5060
+directmedia=no
+language=es
+context=public
+tlsenable=yes
+tlsbindaddr=0.0.0.0
+tlscertfile=/etc/asterisk/keys/asterisk.pem
+tlscafile=/etc/asterisk/keys/ca.crt
+tlscipher=ALL
+tlsclientmethod=tlsv1
+```
+
+```ini Messaging Support
+[general]
+port=5060
+accept_outofcall_message=yes
+outofcall_message_context=mensajes
+auth_message_requests=yes
+subscribecontext=suscribir
+```
+</CodeGroup>
+
+### General Section Parameters
+
+<ParamField path="port" type="integer" default="5060">
+  UDP port to bind to for SIP signaling
+</ParamField>
+
+<ParamField path="directmedia" type="boolean" default="yes">
+  Enable/disable direct RTP media between endpoints. Set to `no` to force media through Asterisk
+</ParamField>
+
+<ParamField path="language" type="string" default="en">
+  Default language for prompts and messages
+</ParamField>
+
+<ParamField path="context" type="string" default="default">
+  Default context for incoming calls from SIP peers
+</ParamField>
+
+<ParamField path="allowoverlap" type="boolean" default="yes">
+  Enable/disable overlap dialing support
+</ParamField>
+
+<ParamField path="udpbindaddr" type="string" default="0.0.0.0">
+  IP address to bind UDP listener to. Use `0.0.0.0` to bind to all interfaces
+</ParamField>
+
+<ParamField path="tcpenable" type="boolean" default="no">
+  Enable TCP transport for SIP signaling
+</ParamField>
+
+<ParamField path="tcpbindaddr" type="string" default="0.0.0.0">
+  IP address to bind TCP listener to
+</ParamField>
+
+<ParamField path="transport" type="string" default="udp">
+  Default transport protocol. Options: `udp`, `tcp`, `tls`
+</ParamField>
+
+<ParamField path="srvlookup" type="boolean" default="yes">
+  Enable DNS SRV lookups on outbound calls
+</ParamField>
+
+### TLS Configuration Parameters
+
+<ParamField path="tlsenable" type="boolean" default="no">
+  Enable TLS encryption for SIP signaling
+</ParamField>
+
+<ParamField path="tlsbindaddr" type="string" default="0.0.0.0">
+  IP address to bind TLS listener to
+</ParamField>
+
+<ParamField path="tlscertfile" type="string">
+  Path to the TLS certificate file in PEM format
+</ParamField>
+
+<ParamField path="tlscafile" type="string">
+  Path to the Certificate Authority (CA) file for validating client certificates
+</ParamField>
+
+<ParamField path="tlscipher" type="string" default="ALL">
+  Cipher suite to use for TLS connections
+</ParamField>
+
+<ParamField path="tlsclientmethod" type="string" default="tlsv1">
+  TLS protocol version. Options: `tlsv1`, `sslv3`, `sslv2`
+</ParamField>
+
+### Messaging Parameters
+
+<ParamField path="accept_outofcall_message" type="boolean" default="no">
+  Accept SIP MESSAGE requests outside of active calls
+</ParamField>
+
+<ParamField path="outofcall_message_context" type="string">
+  Dialplan context to handle incoming SIP messages
+</ParamField>
+
+<ParamField path="auth_message_requests" type="boolean" default="no">
+  Require authentication for SIP MESSAGE requests
+</ParamField>
+
+<ParamField path="subscribecontext" type="string">
+  Context for handling SIP SUBSCRIBE requests (presence)
+</ParamField>
+
+## Peer/Friend Definitions
+
+Each SIP endpoint is defined in its own section.
+
+<CodeGroup>
+```ini Basic Peer
+[javier]
+type=friend
+secret=12345678
+context=empleado
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+```
+
+```ini TLS Encrypted Peer
+[javier]
+type=friend
+secret=310195
+context=empleado
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+callgroup=2
+pickupgroup=2
+transport=tls
+```
+
+```ini Director with Call Groups
+[director]
+type=friend
+secret=130261
+context=direccion
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+callgroup=1
+pickupgroup=1,2
+```
+</CodeGroup>
+
+### Peer Parameters
+
+<ParamField path="type" type="string" required>
+  Peer type: `friend` (peer+user), `peer` (outbound only), or `user` (inbound only)
+</ParamField>
+
+<ParamField path="secret" type="string">
+  Password for authentication
+</ParamField>
+
+<ParamField path="context" type="string" required>
+  Dialplan context for calls from this peer
+</ParamField>
+
+<ParamField path="host" type="string" default="dynamic">
+  IP address of the peer, or `dynamic` for registration-based
+</ParamField>
+
+<ParamField path="canreinvite" type="boolean" default="yes">
+  Allow re-INVITE for direct media path. Set to `no` to keep media flowing through Asterisk
+</ParamField>
+
+<ParamField path="nat" type="string">
+  NAT traversal settings. Common values:
+  - `force_rport` - Always send responses to source port
+  - `comedia` - Use connection-oriented media
+  - `force_rport,comedia` - Both options combined
+</ParamField>
+
+<ParamField path="callgroup" type="string">
+  Call group membership (comma-separated group numbers)
+</ParamField>
+
+<ParamField path="pickupgroup" type="string">
+  Groups this peer can pickup calls from (comma-separated)
+</ParamField>
+
+<ParamField path="transport" type="string">
+  Transport protocol for this peer: `udp`, `tcp`, or `tls`
+</ParamField>
+
+## Templates
+
+Templates allow you to define reusable configuration blocks.
+
+<CodeGroup>
+```ini Basic Template
+[basic-options](!)
+dtmfmode=rfc2833
+context=from-office
+type=friend
+```
+
+```ini Template Inheritance
+[natted-phone](!,basic-options)
+directmedia=no
+host=dynamic
+
+[public-phone](!,basic-options)
+directmedia=yes
+```
+
+```ini Codec Templates
+[my-codecs](!)
+disallow=all
+allow=ilbc
+allow=g729
+allow=gsm
+allow=g723
+allow=ulaw
+
+[ulaw-phone](!)
+disallow=all
+allow=ulaw
+```
+</CodeGroup>
+
+<Accordion title="Template Syntax">
+  - Template names end with `(!)` to mark them as templates
+  - Templates can inherit from other templates: `[name](!,parent1,parent2)`
+  - Templates are not active endpoints, only configuration blueprints
+  - Use templates to reduce duplication and maintain consistency
+</Accordion>
+
+### Template Parameters
+
+<ParamField path="dtmfmode" type="string" default="rfc2833">
+  DTMF signaling method: `rfc2833`, `inband`, or `info`
+</ParamField>
+
+<ParamField path="disallow" type="string">
+  Disable codecs. Use `all` to disable all codecs before enabling specific ones
+</ParamField>
+
+<ParamField path="allow" type="string">
+  Enable specific codecs. Common values: `ulaw`, `alaw`, `gsm`, `g729`, `ilbc`
+</ParamField>
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Strong Passwords">
+    Always use strong, randomly generated passwords for the `secret` parameter. Avoid common passwords or patterns.
+    
+    ```ini
+    [user]
+    secret=kJ9mP2xR8nQ5wL3vT7yF
+    ```
+  </Accordion>
+
+  <Accordion title="Enable TLS Encryption">
+    For sensitive communications, enable TLS encryption to protect SIP signaling from eavesdropping.
+    
+    ```ini
+    [general]
+    tlsenable=yes
+    tlscertfile=/etc/asterisk/keys/asterisk.pem
+    tlscafile=/etc/asterisk/keys/ca.crt
+    
+    [secure-peer]
+    transport=tls
+    ```
+  </Accordion>
+
+  <Accordion title="Restrict Contexts">
+    Assign peers to specific, restricted contexts to limit what they can dial.
+    
+    ```ini
+    [employee]
+    context=internal-only  ; Can only dial internal extensions
+    
+    [manager]
+    context=international  ; Can dial internal and external
+    ```
+  </Accordion>
+
+  <Accordion title="NAT Configuration">
+    Properly configure NAT settings for peers behind firewalls to ensure reliable connectivity.
+    
+    ```ini
+    nat=force_rport,comedia
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Complete Example
+
+```ini sip.conf
+[general]
+port=5060
+directmedia=no
+language=es
+context=public
+allowoverlap=no
+udpbindaddr=0.0.0.0
+tcpenable=no
+tcpbindaddr=0.0.0.0
+transport=udp
+srvlookup=yes
+
+; TLS Configuration
+tlsenable=yes
+tlsbindaddr=0.0.0.0
+tlscertfile=/etc/asterisk/keys/asterisk.pem
+tlscafile=/etc/asterisk/keys/ca.crt
+tlscipher=ALL
+tlsclientmethod=tlsv1
+
+; Messaging
+accept_outofcall_message=yes
+outofcall_message_context=mensajes
+auth_message_requests=yes
+subscribecontext=suscribir
+
+[authentication]
+
+; Employee Extensions
+[javier]
+type=friend
+secret=310195
+context=empleado
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+callgroup=2
+pickupgroup=2
+transport=tls
+
+[belen]
+type=friend
+secret=120995
+context=empleado
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+callgroup=2
+pickupgroup=2
+
+; Management
+[director]
+type=friend
+secret=130261
+context=direccion
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+callgroup=1
+pickupgroup=1,2
+
+; Templates
+[basic-options](!)
+dtmfmode=rfc2833
+context=from-office
+type=friend
+
+[natted-phone](!,basic-options)
+directmedia=no
+host=dynamic
+
+[my-codecs](!)
+disallow=all
+allow=ilbc
+allow=g729
+allow=gsm
+allow=ulaw
+```
+
+## Related Configuration
+
+- [extensions.conf](/config/extensions-conf) - Dialplan configuration
+- [voicemail.conf](/config/voicemail-conf) - Voicemail settings
+- [queues.conf](/config/queues-conf) - Call queue configuration

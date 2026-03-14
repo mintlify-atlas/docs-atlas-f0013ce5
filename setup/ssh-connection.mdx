@@ -1,0 +1,121 @@
+---
+title: SSH Connection Setup
+description: Configure OpenSSH server and connect remotely to your Asterisk server using MobaXterm
+---
+
+Before managing your Asterisk server remotely, you need to install and configure SSH access. This guide covers installing OpenSSH and connecting from a Windows machine using MobaXterm.
+
+## Installing OpenSSH
+
+If OpenSSH wasn't installed during the OS installation, install it with:
+
+```bash
+sudo apt-get install openssh-server
+```
+
+## Finding Your Server IP
+
+To find your server's current IP address:
+
+```bash
+ip address
+```
+
+This will show all network interfaces. Look for your primary interface (typically `ens33` on virtual machines).
+
+<Note>
+It's recommended to configure a static IP address to avoid connection issues. See the [Static IP Configuration](/setup/static-ip) guide.
+</Note>
+
+## Configuring SSH Server
+
+Edit the SSH daemon configuration file to set the listening port and address:
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+Modify or add these lines:
+
+```text
+Port 22
+#AddressFamily any
+#ListenAddress 0.0.0.0
+ListenAddress 192.168.1.180
+```
+
+Replace `192.168.1.180` with your server's IP address.
+
+## Managing SSH Service
+
+Use these commands to control the SSH service:
+
+<CodeGroup>
+
+```bash Start SSH
+sudo /etc/init.d/ssh start
+```
+
+```bash Stop SSH
+sudo /etc/init.d/ssh stop
+```
+
+```bash Restart SSH
+sudo /etc/init.d/ssh restart
+```
+
+```bash Check Status
+sudo /etc/init.d/ssh status
+```
+
+</CodeGroup>
+
+## Connecting with MobaXterm
+
+MobaXterm is a powerful SSH client for Windows with an integrated X server and tabbed interface.
+
+<Steps>
+
+<Step title="Download MobaXterm">
+Download [MobaXterm](https://mobaxterm.mobatek.net/) and install it on your Windows machine.
+</Step>
+
+<Step title="Create New Session">
+1. Open MobaXterm
+2. Click on **Session** in the top menu
+3. Select **SSH**
+</Step>
+
+<Step title="Configure Connection">
+Enter your connection details:
+- **Remote host**: Your server's IP address (e.g., `192.168.1.180`)
+- **Port**: 22 (default SSH port)
+- **Username**: Your Linux username
+</Step>
+
+<Step title="Connect">
+Click **OK** to connect. You'll be prompted for your password on first connection.
+</Step>
+
+</Steps>
+
+## Verifying the Connection
+
+Once connected, verify that SSH is working properly:
+
+```bash
+ps ax | grep sshd
+```
+
+You should see the sshd process running, confirming your SSH connection is active.
+
+<Warning>
+Make sure your firewall allows SSH connections on port 22. If using a virtual machine, ensure the network adapter is in **Bridged** mode for network access.
+</Warning>
+
+## Next Steps
+
+With SSH configured, you can now:
+- Manage your server remotely
+- Transfer files using SFTP
+- Proceed with [Asterisk installation](/setup/asterisk-installation)

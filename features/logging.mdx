@@ -1,0 +1,328 @@
+---
+title: Logging and Call Records
+description: Configure Asterisk logging to track calls and troubleshoot issues
+---
+
+Asterisk provides comprehensive logging capabilities to track system events, calls, and errors. Proper logging is essential for troubleshooting and compliance.
+
+<Warning>
+This implementation should be done after [integrating Asterisk with MariaDB](/database/mariadb-installation).
+</Warning>
+
+## Log Files Location
+
+Asterisk logs are stored in `/var/log/asterisk/`:
+
+```bash
+ls -l /var/log/asterisk/
+```
+
+Common log files:
+- `messages` - General system messages
+- `cdr-csv/Master.csv` - Call Detail Records (CDR)
+- `queue_log` - Queue events
+- `full` - All messages (if enabled)
+
+## Viewing the Messages Log
+
+The `messages` file contains warnings, errors, and notices:
+
+```bash
+tail /var/log/asterisk/messages
+```
+
+By default, verbose call traces are **not** written to this file.
+
+## Configuring logger.conf
+
+### View Current Configuration
+
+From the Asterisk CLI:
+
+```
+CLI> logger show channels
+```
+
+You'll see something like:
+
+```
+Channel                     Type     Status    Configuration
+-------                     ----     ------    -------------
+console                     Console  Enabled   notice,warning,error
+messages                    File     Enabled   notice,warning,error
+```
+
+The console has verbose logging, but the file does not.
+
+### Enable Verbose Logging
+
+Edit `/etc/asterisk/logger.conf`:
+
+```bash
+sudo vim /etc/asterisk/logger.conf
+```
+
+Under the `[logfiles]` section, add `verbose(3)` to the messages line:
+
+```conf
+[logfiles]
+console => notice,warning,error
+messages => notice,warning,error,verbose(3)
+```
+
+**Verbose levels:**
+- `verbose(1)` - Minimal verbosity
+- `verbose(3)` - Moderate verbosity (recommended)
+- `verbose(5)` - High verbosity
+
+Reload the logger:
+
+```
+CLI> logger reload
+CLI> logger show channels
+```
+
+Now the messages file shows:
+```
+messages    File     Enabled   notice,warning,error,verbose(3)
+```
+
+### Test Verbose Logging
+
+Make a test call, then view the log:
+
+```bash
+tail -n 15 /var/log/asterisk/messages
+```
+
+You should see detailed call information including:
+- Extension dialed
+- Channel allocation
+- SIP messages
+- Call duration
+- Hangup cause
+
+<Warning>
+**Do not run verbose logging in production long-term.** The log file grows very quickly and can fill disk space. Use it only for troubleshooting specific issues.
+</Warning>
+
+## Call Detail Records (CDR)
+
+Asterisk maintains a CSV file with all call records at:
+```
+/var/log/asterisk/cdr-csv/Master.csv
+```
+
+### Viewing CDR Records
+
+View the CDR file in a formatted table:
+
+```bash
+column -s, -t < /var/log/asterisk/cdr-csv/Master.csv | less -#2 -N -S
+```
+
+**Column navigation:**
+- Arrow keys to scroll
+- `q` to quit
+- `-S` prevents line wrapping
+
+### CDR Fields
+
+The Master.csv contains these fields:
+
+| Field | Description |
+|-------|-------------|
+| accountcode | Account code for billing |
+| src | Caller ID number |
+| dst | Destination extension |
+| dcontext | Destination context |
+| clid | Caller ID with name |
+| channel | Channel used |
+| dstchannel | Destination channel |
+| lastapp | Last application executed |
+| lastdata | Last application arguments |
+| start | Call start time |
+| answer | Call answer time |
+| end | Call end time |
+| duration | Total duration (seconds) |
+| billsec | Billable duration (seconds) |
+| disposition | Call status (ANSWERED, NO ANSWER, BUSY, FAILED) |
+| amaflags | AMA flag |
+| uniqueid | Unique call identifier |
+
+## Log Configuration Examples
+
+<CodeGroup>
+```conf Basic Logging
+[logfiles]
+; Console - verbose for CLI monitoring
+console => notice,warning,error
+
+; File - errors and warnings only
+messages => notice,warning,error
+```
+
+```conf Debug Logging
+[logfiles]
+; Full debugging (use temporarily)
+console => notice,warning,error,debug
+messages => notice,warning,error,verbose(5),debug
+full => *
+```
+
+```conf Production Logging
+[logfiles]
+; Minimal logging for production
+console => notice,warning,error
+messages => notice,warning,error
+
+; Separate error log
+errors => error,warning
+```
+
+```conf Custom Logs
+[logfiles]
+console => notice,warning,error
+messages => notice,warning,error
+
+; Security events
+security => security
+
+; DTMF tones
+dtmf => dtmf
+
+; Fax events  
+fax => fax
+```
+</CodeGroup>
+
+## Log Levels Explained
+
+- **debug** - Detailed debugging information
+- **notice** - Normal but significant conditions
+- **warning** - Warning conditions
+- **error** - Error conditions
+- **verbose(n)** - Verbose call progress (1-5)
+- **dtmf** - DTMF tone events
+- **fax** - Fax transmission events
+- **security** - Security-related events
+
+## Log Rotation
+
+Rotate logs manually:
+
+```
+CLI> logger rotate
+```
+
+This creates timestamped backups of current logs.
+
+### Automatic Rotation with logrotate
+
+Create `/etc/logrotate.d/asterisk`:
+
+```bash
+/var/log/asterisk/messages {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    postrotate
+        /usr/sbin/asterisk -rx 'logger reload' > /dev/null 2>&1 || true
+    endscript
+}
+```
+
+This rotates logs daily, keeps 7 days, and compresses old logs.
+
+## Monitoring Logs in Real-Time
+
+### Tail the messages file
+
+```bash
+tail -f /var/log/asterisk/messages
+```
+
+### Filter for specific events
+
+```bash
+# Watch for errors only
+tail -f /var/log/asterisk/messages | grep ERROR
+
+# Watch specific extension
+tail -f /var/log/asterisk/messages | grep 4000
+
+# Watch SIP events
+tail -f /var/log/asterisk/messages | grep SIP
+```
+
+## Analyzing CDR Data
+
+### Count calls by extension
+
+```bash
+cat /var/log/asterisk/cdr-csv/Master.csv | cut -d',' -f3 | sort | uniq -c
+```
+
+### Find calls on specific date
+
+```bash
+grep "2024-03-14" /var/log/asterisk/cdr-csv/Master.csv
+```
+
+### Calculate total talk time
+
+```bash
+cat /var/log/asterisk/cdr-csv/Master.csv | awk -F',' '{sum+=$14} END {print "Total seconds:", sum}'
+```
+
+<Info>
+For advanced CDR analysis, consider storing CDR data in a database using [ODBC](/database/mariadb-installation) integration.
+</Info>
+
+## Troubleshooting with Logs
+
+<Steps>
+  <Step title="Enable verbose logging">
+    Edit `logger.conf` to add `verbose(5)` to messages.
+  </Step>
+
+  <Step title="Reload logger">
+    ```
+    CLI> logger reload
+    ```
+  </Step>
+
+  <Step title="Reproduce the issue">
+    Make the problematic call or trigger the error.
+  </Step>
+
+  <Step title="Review logs">
+    ```bash
+    tail -n 100 /var/log/asterisk/messages
+    ```
+    
+    Look for ERROR, WARNING, or unexpected behavior.
+  </Step>
+
+  <Step title="Disable verbose logging">
+    Remove `verbose(5)` from logger.conf and reload.
+  </Step>
+</Steps>
+
+## Best Practices
+
+1. **Use verbose logging sparingly** - Only enable when troubleshooting
+2. **Rotate logs regularly** - Prevent disk space issues
+3. **Monitor disk usage** - `df -h /var/log`
+4. **Secure log files** - Contains sensitive call information
+5. **Archive old CDRs** - For compliance and billing
+6. **Set up alerts** - For critical errors
+
+## Reload Configuration
+
+```
+CLI> logger reload
+```

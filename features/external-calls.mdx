@@ -1,0 +1,197 @@
+---
+title: External Calls Simulation
+description: Simulate external calls by redirecting to different contexts based on dialed number patterns
+---
+
+Simulate calls from outside the PBX by redirecting specific number patterns to different contexts. This is useful for testing external call scenarios.
+
+<Warning>
+This implementation should be done after [integrating Asterisk with MariaDB](/database/mariadb-installation).
+</Warning>
+
+## Overview
+
+Typically, companies receive external calls on a range of phone numbers. For example, if your company is assigned numbers 995554000-995554999, external callers would dial these numbers to reach specific extensions.
+
+This feature:
+- Simulates external calls by pattern matching
+- Extracts the extension from the dialed number
+- Redirects to the appropriate internal context
+- Handles non-existent extensions gracefully
+
+## Configuring SIP Users
+
+Create a user representing external callers in `sip.conf`:
+
+```conf
+[exterior]
+type=friend
+secret=123456
+context=entrantes
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+```
+
+This user belongs to the `entrantes` (incoming) context.
+
+## Configuring the Dialplan
+
+### Incoming Context
+
+In `extensions.conf`, configure the `entrantes` context to handle external calls:
+
+```conf
+[entrantes]
+; Redirect to dialed extension
+exten => _995554XXX,1,Set(extension=${EXTEN:5})
+same => n,NoOp(Llamando a la extension ${extension})
+same => n,Goto(empleado,${extension},1)
+same => n,Hangup()
+```
+
+**How it works:**
+- `_995554XXX` - Matches numbers 995554000-995554999
+- `${EXTEN:5}` - Extracts the last 4 digits (the extension)
+- `Goto(empleado,${extension},1)` - Redirects to the employee context
+
+### Handling Invalid Extensions
+
+In the `empleado` context, catch extensions that don't have devices assigned:
+
+```conf
+[empleado]
+; Other extensions (4000, 4001, etc.) defined above...
+
+; Catch-all for unassigned extensions
+exten => _4XXX,1,Answer()
+same => n,Festival(La extension ${extension} no se encuentra disponible)
+same => n,Hangup()
+```
+
+This catches any 4-digit extension starting with 4 that wasn't matched earlier.
+
+## Complete Configuration Example
+
+<CodeGroup>
+```conf sip.conf
+[general]
+port=5060
+directmedia=no
+language=es
+
+[exterior]
+type=friend
+secret=123456
+context=entrantes
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+
+[javier]
+type=friend
+secret=310195
+context=empleado
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+
+[belen]
+type=friend
+secret=120995
+context=empleado
+host=dynamic
+canreinvite=no
+nat=force_rport,comedia
+```
+
+```conf extensions.conf
+[entrantes]
+; External call routing with extension extraction
+exten => _995554XXX,1,Set(extension=${EXTEN:5})
+same => n,NoOp(Llamando a la extension ${extension})
+same => n,Goto(empleado,${extension},1)
+same => n,Hangup()
+
+[empleado]
+; Configured extensions
+exten => 4000,1,NoOp(Llamando a Javier)
+same => n,Dial(SIP/javier,15)
+same => n,VoiceMail(${EXTEN})
+same => n,Hangup()
+
+exten => 4001,1,NoOp(Llamando a Belen)
+same => n,Dial(SIP/belen,15)
+same => n,VoiceMail(${EXTEN})
+same => n,Hangup()
+
+; Catch unassigned extensions
+exten => _4XXX,1,Answer()
+same => n,Festival(La extension ${extension} no se encuentra disponible)
+same => n,Hangup()
+```
+</CodeGroup>
+
+## Reload Configuration
+
+After updating the files:
+
+```
+CLI> dialplan reload
+CLI> sip reload
+```
+
+## Testing External Calls
+
+<Steps>
+  <Step title="Call existing extension">
+    From the `exterior` user, dial **995554001** (Belen's extension).
+    
+    Expected result:
+    - Extension extracted: 4001
+    - Call redirected to empleado context
+    - Belen's phone rings
+  </Step>
+
+  <Step title="Call non-existent extension">
+    From the `exterior` user, dial **995554022**.
+    
+    Expected result:
+    - Extension extracted: 4022
+    - No device found for 4022
+    - Festival announces: "La extension 4022 no se encuentra disponible"
+  </Step>
+</Steps>
+
+## Understanding Pattern Matching
+
+| Pattern | Matches | Example |
+|---------|---------|----------|
+| `_995554XXX` | 995554 + any 3 digits | 995554000-995554999 |
+| `_4XXX` | 4 + any 3 digits | 4000-4999 |
+| `${EXTEN:5}` | Skip first 5 chars | "995554001" → "4001" |
+
+<Info>
+The `${EXTEN:5}` syntax uses string manipulation to extract a substring. The number after the colon indicates the starting position (0-indexed).
+</Info>
+
+## Advanced: Multiple Number Ranges
+
+You can handle multiple external number ranges:
+
+```conf
+[entrantes]
+; Main office line: 995554XXX → 4XXX
+exten => _995554XXX,1,Set(extension=${EXTEN:5})
+same => n,Goto(empleado,${extension},1)
+
+; Support line: 995555XXX → 5XXX  
+exten => _995555XXX,1,Set(extension=${EXTEN:5})
+same => n,Goto(soporte,${extension},1)
+
+; Sales line: 995556XXX → 6XXX
+exten => _995556XXX,1,Set(extension=${EXTEN:5})
+same => n,Goto(ventas,${extension},1)
+```
+
+This allows different external numbers to route to different departments or contexts.

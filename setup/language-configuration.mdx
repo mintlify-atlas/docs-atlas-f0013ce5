@@ -1,0 +1,309 @@
+---
+title: Language Configuration
+description: Install Spanish sound files and configure Asterisk to use Spanish as the default language
+---
+
+Asterisk ships with English sound files by default. This guide shows how to install Spanish (Castilian) sound prompts and set Spanish as the default language for your PBX.
+
+## Create Spanish Sounds Directory
+
+First, create a directory for Spanish audio files:
+
+```bash
+mkdir /var/lib/asterisk/sounds/es
+```
+
+## Download Spanish Sound Files
+
+Asterisk provides Spanish sound files in multiple packages:
+
+<Steps>
+
+<Step title="Navigate to Sounds Directory">
+```bash
+cd /var/lib/asterisk/sounds/es
+```
+</Step>
+
+<Step title="Download Core Sound Package">
+```bash
+wget -O core.zip https://www.asterisksounds.org/es-es/download/asterisk-sounds-core-es-ES-sln16.zip
+```
+</Step>
+
+<Step title="Download Extra Sound Package">
+```bash
+wget -O extra.zip https://www.asterisksounds.org/es-es/download/asterisk-sounds-extra-es-ES-sln16.zip
+```
+</Step>
+
+<Step title="Extract Archives">
+```bash
+unzip core.zip
+unzip extra.zip
+```
+</Step>
+
+<Step title="Set Ownership">
+```bash
+sudo chown -R asterisk.asterisk /var/lib/asterisk/sounds/es
+```
+</Step>
+
+</Steps>
+
+## Sound File Formats
+
+The downloaded files are in `.sln16` format (16-bit signed linear, 16kHz). Asterisk performs better when sounds are pre-converted to multiple formats.
+
+### Why Convert Audio Formats?
+
+- **Performance**: Avoids real-time transcoding during calls
+- **Compatibility**: Different codecs require different formats
+- **Efficiency**: Reduces CPU usage during high call volume
+
+## Install Audio Conversion Tools
+
+Install SoX (Sound eXchange) for audio format conversion:
+
+```bash
+sudo apt-get install sox
+```
+
+SoX is a powerful command-line audio processing tool that can convert between many formats.
+
+## Create Conversion Script
+
+Create a script to batch convert all Spanish sound files:
+
+```bash
+cd /var/lib/asterisk/sounds/es/
+sudo vim convertir
+```
+
+Add this script content:
+
+```bash
+#!/bin/bash
+for a in $(find . -name '*.sln16'); do
+  sox -t raw -e signed-integer -b 16 -c 1 -r 16k $a -t gsm -r 8k `echo $a|sed "s/.sln16/.gsm/"`;\
+  sox -t raw -e signed-integer -b 16 -c 1 -r 16k $a -t raw -r 8k -e a-law `echo $a|sed "s/.sln16/.alaw/"`;\
+  sox -t raw -e signed-integer -b 16 -c 1 -r 16k $a -t raw -r 8k -e mu-law `echo $a|sed "s/.sln16/.ulaw/"`;\
+done
+```
+
+### Script Explanation
+
+This script converts each `.sln16` file to three common telephony formats:
+
+- **GSM** (`.gsm`): Compressed format, good quality
+- **A-law** (`.alaw`): European telephony standard
+- **μ-law** (`.ulaw`): North American telephony standard
+
+### Conversion Parameters
+
+- `-t raw`: Raw audio format
+- `-e signed-integer`: Encoding type
+- `-b 16`: 16-bit depth
+- `-c 1`: Mono (1 channel)
+- `-r 16k`: 16kHz sample rate input
+- `-r 8k`: 8kHz sample rate output (telephony standard)
+
+## Execute Conversion
+
+Make the script executable and run it:
+
+```bash
+sudo chmod +x convertir
+sudo ./convertir
+```
+
+<Warning>
+This process can take several minutes as it converts hundreds of audio files. Be patient and don't interrupt the process.
+</Warning>
+
+## Configure SIP for Spanish
+
+Set Spanish as the default language in your SIP configuration:
+
+```bash
+sudo vim /etc/asterisk/sip.conf
+```
+
+Add or modify the `[general]` section:
+
+```ini
+[general]
+language=es
+```
+
+### Complete Example Configuration
+
+Here's a more complete `sip.conf` general section:
+
+```ini
+[general]
+port=5060
+directmedia=no
+language=es
+context=public
+```
+
+## Reload SIP Configuration
+
+Apply the language changes by reloading SIP:
+
+<CodeGroup>
+
+```bash Access Asterisk CLI
+sudo asterisk -rvvvvvvc
+```
+
+```asterisk Reload SIP
+CLI> sip reload
+```
+
+</CodeGroup>
+
+You should see confirmation that the configuration was reloaded successfully.
+
+## Test Language Configuration
+
+Create a simple test extension to verify Spanish prompts:
+
+```bash
+sudo vim /etc/asterisk/extensions.conf
+```
+
+Add a test extension:
+
+```ini
+[empleado]
+exten => 9999,1,Answer()
+same => n,Playback(hello-world)
+same => n,Hangup()
+```
+
+Reload the dialplan:
+
+```asterisk
+CLI> dialplan reload
+```
+
+Call extension 9999 to hear Spanish audio prompts.
+
+## Per-User Language Override
+
+You can set different languages for individual users in `sip.conf`:
+
+```ini
+[javier]
+type=friend
+secret=12345678
+context=empleado
+host=dynamic
+language=es
+
+[john]
+type=friend
+secret=12345678
+context=empleado
+host=dynamic
+language=en
+```
+
+## Available Sound Files
+
+Verify installed Spanish sounds:
+
+```bash
+ls -l /var/lib/asterisk/sounds/es/
+```
+
+You should see directories like:
+- `digits/` - Number pronunciations
+- `letters/` - Letter pronunciations
+- `phonetic/` - Phonetic alphabet
+- Various prompt files (`.gsm`, `.alaw`, `.ulaw`, `.sln16`)
+
+## Sound File Usage in Dialplan
+
+Reference Spanish sounds in your dialplan:
+
+```ini
+[empleado]
+exten => 100,1,Answer()
+same => n,Playback(hello-world)          ; Plays Spanish version
+same => n,SayDigits(12345)               ; Says digits in Spanish
+same => n,Playback(vm-goodbye)           ; Spanish goodbye
+same => n,Hangup()
+```
+
+Asterisk automatically uses the language specified in `sip.conf` or per-channel settings.
+
+## Additional Languages
+
+To install other languages, visit [asterisksounds.org](https://www.asterisksounds.org/) and download:
+
+- French (fr)
+- German (de)
+- Italian (it)
+- Portuguese (pt)
+- And many more...
+
+Follow the same process: download, extract, convert, and configure.
+
+## Troubleshooting
+
+### Sound Files Not Playing
+
+1. Check file ownership:
+   ```bash
+   ls -l /var/lib/asterisk/sounds/es/
+   ```
+   Should show `asterisk:asterisk`
+
+2. Verify file formats exist:
+   ```bash
+   ls -l /var/lib/asterisk/sounds/es/*.gsm | head
+   ```
+
+3. Check Asterisk logs:
+   ```bash
+   tail -f /var/log/asterisk/full
+   ```
+
+### Wrong Language Playing
+
+1. Verify SIP peer language:
+   ```asterisk
+   CLI> sip show peer javier
+   ```
+   Look for the `Language` field
+
+2. Check channel language:
+   ```asterisk
+   CLI> core show channels verbose
+   ```
+
+3. Confirm language in dialplan:
+   ```ini
+   exten => 100,1,Set(CHANNEL(language)=es)
+   ```
+
+## Storage Considerations
+
+<Note>
+Multiple audio formats increase storage requirements:
+- Core + Extra packages: ~100MB per language
+- Converted formats: ~3-4x original size
+- Plan for adequate disk space when adding languages
+</Note>
+
+## Next Steps
+
+With Spanish configured:
+- Start creating SIP users in `sip.conf`
+- Build your dialplan in `extensions.conf`
+- Configure voicemail prompts
+- Set up IVR menus with Spanish prompts

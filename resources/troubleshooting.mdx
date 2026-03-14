@@ -1,0 +1,336 @@
+---
+title: Troubleshooting
+description: Common problems and solutions when configuring Asterisk PBX
+---
+
+## Common Issues
+
+This section covers common problems encountered when installing and configuring Asterisk, along with their solutions.
+
+## Connection Problems
+
+<Accordion title="Unable to connect to remote asterisk (does /var/run/asterisk.ctl exist?)">
+  
+  ### Problem Description
+  
+  When you try to access the Asterisk CLI with:
+  
+  ```bash
+  $ sudo asterisk -rvvvvvvc
+  ```
+  
+  You receive the error:
+  
+  ```
+  Unable to connect to remote asterisk (does /var/run/asterisk.ctl exist?)
+  ```
+  
+  ### Root Cause
+  
+  This error is most likely due to permission problems with the `asterisk` user not having proper access to required directories.
+  
+  ### Solution
+  
+  Fix the permissions by running:
+  
+  ```bash
+  $ sudo chown -R asterisk: /var/{lib,log,run,spool}/asterisk /usr/lib/asterisk /etc/asterisk
+  ```
+  
+  ```bash
+  $ sudo chmod -R 750 /var/{lib,log,run,spool}/asterisk /usr/lib/asterisk /etc/asterisk
+  ```
+  
+  Then reboot the system:
+  
+  ```bash
+  $ sudo reboot
+  ```
+  
+  ### Alternative Solution
+  
+  If the above doesn't work, you can manually launch Asterisk:
+  
+  ```bash
+  $ sudo asterisk -&
+  ```
+  
+  <Note>
+    This is a temporary fix. You should investigate why the service isn't starting properly and fix the underlying permission issues.
+  </Note>
+
+</Accordion>
+
+## CLI Access Issues
+
+<AccordionGroup>
+  <Accordion title="Asterisk service not starting on boot">
+    
+    Ensure the Asterisk service is enabled:
+    
+    ```bash
+    $ sudo systemctl enable asterisk
+    ```
+    
+    Check the service status:
+    
+    ```bash
+    $ sudo systemctl status asterisk
+    ```
+    
+    View service logs:
+    
+    ```bash
+    $ sudo journalctl -u asterisk -n 50
+    ```
+    
+  </Accordion>
+
+  <Accordion title="Cannot reload configuration files">
+    
+    If configuration reloads fail, check syntax first:
+    
+    ```bash
+    CLI> dialplan reload
+    CLI> sip reload
+    ```
+    
+    If there are errors, check the specific configuration file for syntax issues:
+    
+    - Missing semicolons or brackets
+    - Incorrect indentation
+    - Invalid context names
+    
+    View verbose error messages:
+    
+    ```bash
+    $ sudo asterisk -rvvvvvvc
+    ```
+    
+  </Accordion>
+
+  <Accordion title="SIP clients cannot register">
+    
+    **Check SIP configuration:**
+    
+    ```bash
+    CLI> sip show peers
+    CLI> sip show registry
+    ```
+    
+    **Common causes:**
+    
+    1. Firewall blocking port 5060
+    2. Incorrect credentials in softphone
+    3. NAT configuration issues (`nat=force_rport,comedia`)
+    4. Server not listening on correct IP address
+    
+    **Verify binding:**
+    
+    ```bash
+    CLI> sip show settings
+    ```
+    
+  </Accordion>
+</AccordionGroup>
+
+## Database Connection Issues
+
+<Accordion title="ODBC connection failures">
+  
+  ### Problem
+  
+  Asterisk cannot connect to MariaDB/MySQL via ODBC.
+  
+  ### Solution Steps
+  
+  1. **Test ODBC connection directly:**
+  
+  ```bash
+  $ echo "select * from usuarios" | isql -v asterisk-connector asterisk asterisk
+  ```
+  
+  2. **Check ODBC configuration:**
+  
+  ```bash
+  $ cat /etc/odbc.ini
+  $ cat /etc/odbcinst.ini
+  ```
+  
+  3. **Verify Asterisk ODBC status:**
+  
+  ```bash
+  CLI> odbc show
+  ```
+  
+  4. **Reload ODBC module:**
+  
+  ```bash
+  CLI> module reload res_odbc.so
+  ```
+  
+  <Warning>
+    Ensure the MySQL/MariaDB service is running and the `asterisk` user has proper permissions on the database.
+  </Warning>
+
+</Accordion>
+
+## Audio and Voice Issues
+
+<AccordionGroup>
+  <Accordion title="No audio in calls">
+    
+    **Common causes:**
+    
+    1. **RTP port range blocked:** Open UDP ports 10000-20000
+    2. **NAT issues:** Set `directmedia=no` in `sip.conf`
+    3. **Codec mismatch:** Verify both ends support common codec
+    
+    **Check codecs:**
+    
+    ```bash
+    CLI> sip show peer <extension>
+    ```
+    
+  </Accordion>
+
+  <Accordion title="Festival TTS not working">
+    
+    **Verify Festival service:**
+    
+    ```bash
+    $ sudo systemctl status festival.service
+    ```
+    
+    **Check Asterisk module:**
+    
+    ```bash
+    CLI> core show application festival
+    CLI> module load app_festival.so
+    ```
+    
+    **Test Festival directly:**
+    
+    ```bash
+    $ echo "Hello world" | festival --tts
+    ```
+    
+  </Accordion>
+
+  <Accordion title="Voicemail not recording">
+    
+    **Check voicemail directories:**
+    
+    ```bash
+    $ ls -l /var/spool/asterisk/voicemail/
+    ```
+    
+    **Verify configuration:**
+    
+    ```bash
+    CLI> voicemail show users
+    CLI> voicemail reload
+    ```
+    
+    **Ensure correct permissions:**
+    
+    ```bash
+    $ sudo chown -R asterisk:asterisk /var/spool/asterisk/voicemail/
+    ```
+    
+  </Accordion>
+</AccordionGroup>
+
+## TLS/Security Issues
+
+<Accordion title="TLS connections failing">
+  
+  **Verify TLS is enabled:**
+  
+  ```bash
+  CLI> sip show settings | grep TLS
+  ```
+  
+  **Check certificates:**
+  
+  ```bash
+  $ ls -l /etc/asterisk/keys/
+  ```
+  
+  **Verify client configuration:**
+  
+  - Ensure `transport=tls` is set for the peer
+  - Certificate files (`.pem`, `.crt`) are correctly installed
+  - Client is using correct port (usually 5061 for TLS)
+  
+  **View TLS connections:**
+  
+  ```bash
+  CLI> sip show tcp
+  CLI> sip show peers
+  ```
+
+</Accordion>
+
+## Performance and Logging
+
+<AccordionGroup>
+  <Accordion title="Log files growing too large">
+    
+    Disable verbose logging in production:
+    
+    Edit `/etc/asterisk/logger.conf`:
+    
+    ```ini
+    [logfiles]
+    console => notice,warning,error
+    messages => notice,warning,error
+    ```
+    
+    Then reload:
+    
+    ```bash
+    CLI> logger reload
+    ```
+    
+    <Note>
+      Only enable `verbose(3)` temporarily for debugging specific issues.
+    </Note>
+    
+  </Accordion>
+
+  <Accordion title="High CPU usage">
+    
+    **Check active calls:**
+    
+    ```bash
+    CLI> core show channels
+    CLI> queue show
+    ```
+    
+    **Review module usage:**
+    
+    ```bash
+    CLI> module show
+    ```
+    
+    **Disable unnecessary modules** in `/etc/asterisk/modules.conf`
+    
+  </Accordion>
+</AccordionGroup>
+
+## Getting Help
+
+<CardGroup cols={2}>
+  <Card title="Asterisk Community" icon="users" href="https://community.asterisk.org">
+    Community forum for Asterisk questions and discussions
+  </Card>
+  
+  <Card title="Asterisk Wiki" icon="book" href="https://wiki.asterisk.org">
+    Official documentation and troubleshooting guides
+  </Card>
+</CardGroup>
+
+<Tip>
+  Always check the Asterisk logs at `/var/log/asterisk/messages` and enable verbose mode (`asterisk -rvvvvvvc`) when troubleshooting issues.
+</Tip>

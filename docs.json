@@ -1,122 +1,119 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Asterisk Tutorial",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#ee7924",
+    "light": "#8e7a69",
+    "dark": "#dcd5cc"
   },
   "favicon": "/favicon.svg",
+  "logo": {
+    "light": "https://media.brand.dev/d10a8b80-2165-4166-920a-692ae7fec06b.png",
+    "dark": "https://media.brand.dev/d10a8b80-2165-4166-920a-692ae7fec06b.png"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/javierorp/Asterisk_Tutorial"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/javierorp/Asterisk_Tutorial"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Installation & Setup",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "setup/ssh-connection",
+              "setup/static-ip",
+              "setup/asterisk-installation",
+              "setup/user-creation",
+              "setup/language-configuration"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "PBX Features",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "features/voicemail",
+              "features/call-transfer",
+              "features/sip-messaging",
+              "features/call-groups",
+              "features/call-pickup",
+              "features/text-to-speech",
+              "features/call-security",
+              "features/external-calls",
+              "features/business-hours",
+              "features/logging",
+              "features/call-queues"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Database Integration",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "database/mariadb-installation",
+              "database/odbc-connector",
+              "database/asterisk-connection"
+            ]
+          },
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "advanced/pbx-interconnection",
+              "advanced/dundi-protocol",
+              "advanced/call-center-example"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "resources/softphones",
+              "resources/troubleshooting",
+              "resources/useful-links"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Configuration Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Configuration Files",
             "pages": [
-              "api-reference/introduction"
+              "config/sip-conf",
+              "config/extensions-conf",
+              "config/voicemail-conf",
+              "config/queues-conf",
+              "config/features-conf",
+              "config/dundi-conf",
+              "config/festival-conf"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Dialplan",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "dialplan/overview",
+              "dialplan/contexts",
+              "dialplan/extensions",
+              "dialplan/applications",
+              "dialplan/variables"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

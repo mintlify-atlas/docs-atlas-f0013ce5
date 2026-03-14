@@ -1,0 +1,186 @@
+---
+title: Static IP Configuration
+description: Configure a static IP address on Debian for your Asterisk server
+---
+
+Assigning a static IP address to your Asterisk server prevents connection issues and makes remote management more reliable. Without a static IP, your server's address may change after reboots.
+
+## Check Current IP Address
+
+First, identify your current network configuration:
+
+```bash
+ip address
+```
+
+Note your:
+- Network interface name (usually `ens33` on VMware)
+- Current IP address
+- Network subnet
+
+## Editing Network Interfaces
+
+The network configuration file in Debian is `/etc/network/interfaces`:
+
+```bash
+sudo vim /etc/network/interfaces
+```
+
+### Default Configuration
+
+By default, the file looks like this with DHCP enabled:
+
+```text
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+source /etc/network/interfaces.d/*
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+allow-hotplug ens33
+iface ens33 inet dhcp
+```
+
+## Configuring Static IP
+
+Modify the configuration to use a static IP address:
+
+```text
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+source /etc/network/interfaces.d/*
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+allow-hotplug ens33
+iface ens33 inet static
+    address 192.168.1.200
+    gateway 192.168.1.1
+```
+
+<Warning>
+**Important**: Be careful with indentation. The `address` and `gateway` lines must be indented with spaces (typically 4 spaces).
+</Warning>
+
+### Configuration Parameters
+
+- **address**: Your chosen static IP (e.g., `192.168.1.200`)
+- **gateway**: Your router's IP address (commonly `192.168.1.1` or `192.168.0.1`)
+
+<Note>
+Make sure the IP address you choose:
+- Is within your network's subnet range
+- Doesn't conflict with other devices
+- Is outside your DHCP server's assignment range
+</Note>
+
+## Configuring DNS Servers
+
+To ensure internet connectivity and package downloads work properly, configure DNS servers:
+
+```bash
+sudo vim /etc/resolv.conf
+```
+
+Add reliable DNS servers:
+
+```text
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+```
+
+This configuration uses:
+- **8.8.8.8**: Google Public DNS
+- **1.1.1.1**: Cloudflare DNS
+
+## Applying the Configuration
+
+<Steps>
+
+<Step title="Restart Networking Service">
+Restart the networking service to apply changes:
+
+```bash
+sudo systemctl restart networking
+```
+</Step>
+
+<Step title="Reboot the System">
+Reboot to ensure all changes take effect:
+
+```bash
+sudo reboot
+```
+</Step>
+
+<Step title="Verify the Configuration">
+After reboot, confirm the static IP is assigned:
+
+```bash
+ip address
+```
+
+You should see your configured static IP on the `ens33` interface.
+</Step>
+
+</Steps>
+
+## Testing Network Connectivity
+
+Verify that your network configuration works correctly:
+
+```bash
+ping -c3 www.debian.org
+```
+
+Successful ping responses confirm:
+- Network connectivity is working
+- DNS resolution is functioning
+- Gateway configuration is correct
+
+## Troubleshooting
+
+If you encounter connection issues:
+
+1. **Check interface status**:
+   ```bash
+   ip link show
+   ```
+
+2. **Verify routing table**:
+   ```bash
+   ip route
+   ```
+
+3. **Test gateway connectivity**:
+   ```bash
+   ping 192.168.1.1
+   ```
+
+4. **Check DNS resolution**:
+   ```bash
+   nslookup debian.org
+   ```
+
+## Network Bridge Mode (Virtual Machines)
+
+If running Asterisk in a virtual machine like VMware or VirtualBox:
+
+<Warning>
+Set the network adapter to **Bridged** mode to allow the VM to obtain an IP address on the same network as your host machine. NAT mode may cause connectivity issues.
+</Warning>
+
+## Next Steps
+
+With a static IP configured:
+- Your server has a reliable, permanent address
+- You can [configure SSH](/setup/ssh-connection) with confidence
+- Remote clients can always find your Asterisk server

@@ -1,0 +1,343 @@
+---
+title: 'Contexts'
+description: 'Understanding Asterisk dialplan contexts for organizing and securing extensions'
+---
+
+## What are Contexts?
+
+A **context** is a named collection of extensions in the dialplan. Contexts serve two critical purposes:
+
+1. **Organization**: Group related extensions together (e.g., employees, reception, management)
+2. **Security**: Isolate calling permissions - users can only dial extensions in their assigned context
+
+<Info>
+Contexts are defined in square brackets `[contextname]` and act as security boundaries. A user in the `[empleado]` context cannot access extensions in the `[direccion]` context unless explicitly allowed.
+</Info>
+
+## Context Syntax
+
+Contexts are defined in `extensions.conf`:
+
+```conf
+[context-name]
+exten => pattern,priority,application(arguments)
+exten => pattern,priority,application(arguments)
+```
+
+## The [general] Context
+
+The `[general]` section contains global dialplan configuration:
+
+```conf extensions.conf
+[general]
+static=yes              ; Don't save dialplan changes from CLI
+writeprotect=no         ; Allow saving if static=no
+clearglobalvars=no      ; Keep global variables on reload
+```
+
+### Key Settings
+
+| Setting | Description |
+|---------|-------------|
+| `static=yes` | Prevents runtime modifications to the dialplan |
+| `writeprotect=no` | Allows writing changes to disk |
+| `clearglobalvars=no` | Preserves global variables during reload |
+
+## Common Context Examples
+
+From the Asterisk tutorial's call center implementation:
+
+### [empleado] - Employee Context
+
+Extensions available to regular employees:
+
+```conf extensions.conf
+[empleado]
+; Call other employees
+exten => 4000,1,NoOp(Llamando a Javier)
+same => n,Dial(SIP/javier,15)
+same => n,VoiceMail(${EXTEN})
+same => n,Hangup()
+
+exten => 4001,1,NoOp(Llamando a Belen)
+same => n,Dial(SIP/belen,15)
+same => n,VoiceMail(${EXTEN})
+same => n,Hangup()
+
+; Access voicemail
+exten => *4000,1,VoiceMailMain(4000)
+same => n,Hangup()
+
+; Call capture
+exten => _*8.,1,NoOp(Capturando llamada a la extension ${EXTEN:2})
+same => n,Pickup(${EXTEN:2})
+same => n,Hangup()
+```
+
+### [recepcion] - Reception Context
+
+Extensions for reception staff with queue handling:
+
+```conf extensions.conf
+[recepcion]
+; Registered users queue
+exten => 1,1,Set(CHANNEL(musicclass)=recepcion)
+same => n,Answer()
+same => n,Festival(Hola ${nombre})
+same => n(reg),Festival(Por favor espere a que le atiendan)
+same => n,Queue(registrados,,,,60)
+same => n,Goto(1,reg)
+same => n,Hangup()
+
+; Unregistered users queue
+exten => 2,1,Set(CHANNEL(musicclass)=recepcion)
+same => n,Answer()
+same => n(noreg),Festival(Por favor espere a que le atiendan)
+same => n,Queue(noregistrados,,,,60)
+same => n,Goto(2,noreg)
+same => n,Hangup()
+
+; Call any extension
+exten => _XXX,1,Set(extension=${EXTEN})
+same => n,Set(nombre=${ODBC_extension(${extension})})
+same => n,GotoIf($["${nombre}" != ""]?llamar,${extension},1)
+same => n,Festival(La extension ${extension} no se encuentra disponible)
+same => n,Hangup()
+```
+
+### [direccion] - Management Context
+
+Management context with extended permissions:
+
+```conf extensions.conf
+[direccion]
+; Call groups
+exten => _X00,1,Festival(Llamada a grupo ${EXTEN})
+same => n,Goto(llamar-grupo,${EXTEN},1)
+same => n,Hangup()
+
+; Call any extension
+exten => _XXX,1,Set(extension=${EXTEN})
+same => n,Set(nombre=${ODBC_extension(${extension})})
+same => n,GotoIf($["${nombre}" != ""]?llamar,${extension},1)
+same => n,Festival(La extension ${extension} no se encuentra disponible)
+same => n,Hangup()
+
+; Capture any call (no restrictions)
+exten => _*8.,1,Set(extension=${EXTEN:2})
+same => n,Goto(llamar,8,1)
+same => n,Hangup()
+
+; External calls
+exten => _XXXXXXXXX,1,Goto(llamar,${EXTEN},1))
+same => n,Hangup()
+```
+
+<Tip>
+Notice how the management context has access to all features, while employee context has restricted call capture based on pickupgroup settings in `sip.conf`.
+</Tip>
+
+## Context Includes
+
+Contexts can include other contexts, inheriting their extensions:
+
+```conf extensions.conf
+[public]
+include => exterior
+include => demo
+
+[longdistance]
+ignorepar => 9
+include => local
+include => trunkld
+
+[international]
+ignorepar => 9
+include => longdistance
+include => trunkint
+```
+
+### Include Hierarchy
+
+From the tutorial:
+
+```conf
+[exterior]  ; External calls context
+exten => 757112233,1,GotoIfTime(8:00-20:00,mon-fri,*,*?abierto,1,1)
+same => n,Festival(En estos momentos no hay nadie que te pueda atender)
+same => n,Hangup()
+
+[public]
+include => exterior  ; Public context includes exterior
+```
+
+<Steps>
+  <Step title="Caller enters [public] context">
+    The call starts in the public context from sip.conf
+  </Step>
+  
+  <Step title="Extension lookup">
+    Asterisk searches for matching extensions in [public] first
+  </Step>
+  
+  <Step title="Search included contexts">
+    If not found in [public], searches [exterior] context
+  </Step>
+  
+  <Step title="Execute match">
+    Executes the first matching extension found
+  </Step>
+</Steps>
+
+## Specialized Contexts
+
+### [entrantes] - Incoming Calls
+
+Context for external incoming calls:
+
+```conf extensions.conf
+[entrantes]
+; Group calling
+exten => 4040,1,NoOp(Llamando al grupo 'empleados')
+same => n,Dial(SIP/javier&SIP/belen,60)
+same => n,Hangup()
+```
+
+### [mensajes] - Message Handling
+
+Special context for SIP MESSAGE processing:
+
+```conf extensions.conf
+[mensajes]
+exten => _X.,1,Set(dest=${EXTEN})
+same => n,Set(remitente=${CUT(MESSAGE(from),<,2)})
+same => n,Set(remitente=${CUT(remitente,@,1)})
+same => n,Set(remitente=${CUT(remitente,:,2)})
+same => n,Set(texto=${MESSAGE(body)})
+same => n,Set(MESSAGE(body)=${remitente}: ${texto})
+same => n,MessageSend(sip:${dest}, Centro de Mensajes(CdM))
+same => n,Noop(Estado del mensaje ${MESSAGE_SEND_STATUS})
+same => n,GotoIf($["${MESSAGE_SEND_STATUS}" != "SUCCESS"]?fallo,s,1)
+same => n,Hangup()
+
+[fallo]
+exten => s,1,Set(MESSAGE(body)=CdM: El mensaje "${texto}" para ${dest} no ha sido enviado)
+same => n,Set(remit=${CUT(MESSAGE(from),<,2)})
+same => n,Set(remit=${CUT(remit,@,1)})
+same => n,MessageSend(${remit},Centro de Mensajes(CdM))
+same => n,NoOp(Estado del mensaje ${MESSAGE_SEND_STATUS})
+same => n,Hangup()
+```
+
+### [suscribir] - Presence Hints
+
+Context for SIP presence/subscription:
+
+```conf extensions.conf
+[suscribir]
+exten => 4000,hint,SIP/javier
+exten => 4001,hint,SIP/belen
+exten => 101,hint,SIP/101
+exten => 102,hint,SIP/102
+exten => 103,hint,SIP/103
+```
+
+<Info>
+The `hint` keyword creates device state hints that allow SIP phones to display presence information (busy, ringing, available).
+</Info>
+
+## Linking Contexts in sip.conf
+
+Users are assigned to contexts in `sip.conf`:
+
+```conf sip.conf
+[javier]
+type=friend
+secret=12345678
+context=empleado        ; Javier uses [empleado] context
+host=dynamic
+
+[director]
+type=friend
+secret=130261
+context=direccion       ; Director uses [direccion] context
+host=dynamic
+
+[exterior]
+type=friend
+secret=123456
+context=entrantes       ; External calls use [entrantes] context
+host=dynamic
+```
+
+## Multi-Context Architecture
+
+The tutorial's call center uses a sophisticated multi-context design:
+
+```conf extensions.conf
+[exterior]       ; Public entry point
+  ↓
+[abierto]        ; Business hours menu
+  ↓
+[recepcion]      ; Reception processing
+  ↓
+[llamar]         ; Actual call execution
+  ↓
+[llamar-grupo]   ; Group calling
+
+[doctores]       ; Doctors context
+[enfermeria]     ; Nurses context
+[direccion]      ; Management context
+```
+
+Each context has specific permissions and routing:
+
+```conf
+; Doctors can capture calls only in their group
+[doctores]
+exten => _*8.,1,Set(extension=${EXTEN:2})
+same => n,Set(pref=${extension:0:1})
+same => n,GotoIf($["${pref}" = "3"]?llamar,8,1)
+same => n,Festival(No tiene permiso para capturar una llamada a la extension ${extension})
+same => n,Hangup()
+```
+
+## Context Best Practices
+
+<Steps>
+  <Step title="Use descriptive names">
+    Name contexts based on their purpose: `[employees]`, `[reception]`, `[external]`
+  </Step>
+  
+  <Step title="Implement least privilege">
+    Only give users access to extensions they need
+  </Step>
+  
+  <Step title="Separate concerns">
+    Use different contexts for different call types (internal, external, services)
+  </Step>
+  
+  <Step title="Document extensively">
+    Add comments explaining the purpose of each context
+  </Step>
+</Steps>
+
+## Viewing Active Contexts
+
+From the Asterisk CLI:
+
+```
+CLI> dialplan show contexts
+CLI> dialplan show empleado
+CLI> core show hints
+```
+
+<Tip>
+Always test context security by attempting to dial from one context to restricted extensions in another context to ensure proper isolation.
+</Tip>
+
+## Next Steps
+
+- Learn about **extension patterns** for flexible matching
+- Explore **applications** that execute within contexts
+- Understand **variables** for dynamic context routing

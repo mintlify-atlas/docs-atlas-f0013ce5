@@ -1,0 +1,407 @@
+---
+title: Call Queues
+description: Configure call queues with hold music and distribution strategies for handling high call volumes
+---
+
+Call queues allow multiple callers to wait in line when all agents are busy. This is essential for call centers and support departments.
+
+<Warning>
+This implementation should be done after [integrating Asterisk with MariaDB](/database/mariadb-installation).
+</Warning>
+
+## Overview
+
+A call queue system provides:
+- Automatic call distribution to available agents
+- Music on hold while waiting
+- Configurable queue strategies
+- Maximum wait times
+- Queue statistics and reporting
+
+## Configuring Music on Hold
+
+### Edit musiconhold.conf
+
+Create a custom music-on-hold class in `/etc/asterisk/musiconhold.conf`:
+
+```conf
+[general]
+
+[default]
+mode=files
+directory=moh
+
+[recepcion]
+mode=files
+directory=/var/lib/asterisk/sounds/es/mimusica/
+```
+
+**Parameters:**
+- `mode=files` - Play files from a directory
+- `directory` - Path to audio files (relative to `/var/lib/asterisk/` or absolute)
+
+Reload music on hold:
+
+```
+CLI> moh reload
+CLI> moh show classes
+```
+
+You should see the `recepcion` class listed.
+
+## Configuring the Queue
+
+### Edit queues.conf
+
+Define queues in `/etc/asterisk/queues.conf`:
+
+```conf
+[general]
+persistentmembers = yes
+monitor-type = MixMonitor
+
+[recepcion]
+strategy = leastrecent
+timeout = 30
+member => SIP/javier
+member => SIP/belen
+```
+
+**Key parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `persistentmembers` | Save queue members across restarts |
+| `monitor-type` | Recording method (MixMonitor recommended) |
+| `strategy` | How to distribute calls to members |
+| `timeout` | Seconds to ring each member before trying next |
+| `member` | Static queue members |
+
+### Queue Strategies
+
+**Available strategies:**
+
+- `ringall` - Ring all available members simultaneously
+- `leastrecent` - Ring member who least recently hung up a call
+- `fewestcalls` - Ring member with fewest completed calls
+- `random` - Ring random member
+- `rrmemory` - Round-robin with memory
+- `linear` - Ring in order specified
+- `wrandom` - Weighted random
+
+**Example:** `leastrecent` ensures fair distribution - the agent who finished a call longest ago gets the next call.
+
+### Reload Queues
+
+```
+CLI> queue reload all
+CLI> queue show recepcion
+```
+
+Output shows:
+```
+recepcion has 0 calls (max unlimited) in 'leastrecent' strategy
+   Members:
+      SIP/javier (Not in use) has taken no calls yet
+      SIP/belen (Not in use) has taken no calls yet
+```
+
+## Adding Queue to Dialplan
+
+In `extensions.conf`, create an extension that enters the queue:
+
+```conf
+[empleado]
+; Other extensions...
+
+; Reception queue
+exten => 4444,1,NoOp(Recepcion)
+same => n,Set(CHANNEL(musicclass)=recepcion)
+same => n,Answer()
+same => n,Queue(recepcion,,,,120)
+same => n,Hangup()
+```
+
+**How it works:**
+1. Set music-on-hold class to `recepcion`
+2. Answer the call
+3. Place caller in `recepcion` queue for up to 120 seconds
+4. If no one answers after 120 seconds, exit queue
+
+### Queue() Application Syntax
+
+```
+Queue(queuename[,options[,URL[,announceoverride[,timeout[,AGI[,macro[,gosub[,rule]]]]]]])
+```
+
+Common options:
+- `t` - Allow callee to transfer call
+- `T` - Allow caller to transfer call  
+- `r` - Ring instead of music on hold
+- `n` - No retry (exit queue if no one available)
+
+**Example with options:**
+```conf
+exten => 4444,1,Queue(recepcion,tT,,,120)
+```
+
+This allows both parties to transfer and waits 120 seconds.
+
+## Complete Configuration Example
+
+<CodeGroup>
+```conf musiconhold.conf
+[general]
+
+[default]
+mode=files
+directory=moh
+
+[recepcion]
+mode=files
+directory=/var/lib/asterisk/sounds/es/mimusica/
+
+[soporte]
+mode=files  
+directory=/var/lib/asterisk/sounds/es/support-music/
+```
+
+```conf queues.conf
+[general]
+persistentmembers = yes
+monitor-type = MixMonitor
+
+[recepcion]
+strategy = leastrecent
+timeout = 30
+retry = 5
+maxlen = 10
+announce-frequency = 30
+announce-holdtime = yes
+member => SIP/javier
+member => SIP/belen
+
+[soporte]
+strategy = fewestcalls
+timeout = 20
+maxlen = 5
+member => SIP/tech1
+member => SIP/tech2
+```
+
+```conf extensions.conf
+[empleado]
+; Reception queue
+exten => 4444,1,NoOp(Recepcion)
+same => n,Set(CHANNEL(musicclass)=recepcion)
+same => n,Answer()
+same => n,Queue(recepcion,tT,,,120)
+same => n,Playback(queue-timeout)
+same => n,Voicemail(100)
+same => n,Hangup()
+
+; Support queue with announcement
+exten => 5555,1,NoOp(Soporte tecnico)
+same => n,Set(CHANNEL(musicclass)=soporte)
+same => n,Answer()
+same => n,Playback(support-greeting)
+same => n,Queue(soporte,rt,,,180)
+same => n,Hangup()
+```
+</CodeGroup>
+
+## Advanced Queue Parameters
+
+### Announcements
+
+```conf
+[recepcion]
+strategy = leastrecent
+timeout = 30
+
+; Announce position every 30 seconds
+announce-frequency = 30
+
+; Announce estimated hold time
+announce-holdtime = yes
+
+; Play this to caller when entering queue
+queue-youarenext = custom/you-are-next
+
+; When there are X callers ahead
+queue-thereare = custom/there-are
+
+; Periodic announcement
+periodic-announce = custom/thank-you-for-waiting
+periodic-announce-frequency = 60
+```
+
+### Queue Limits
+
+```conf
+[recepcion]
+strategy = leastrecent
+timeout = 30
+
+; Maximum callers in queue
+maxlen = 10
+
+; Join queue only if member available
+joinempty = no
+
+; Leave queue if all members become unavailable  
+leavewhenempty = yes
+
+; Retry calling members every 5 seconds
+retry = 5
+```
+
+### Call Recording
+
+```conf
+[recepcion]
+strategy = leastrecent
+timeout = 30
+
+; Monitor all calls
+monitor-type = MixMonitor
+monitor-format = wav
+```
+
+Recordings are saved to `/var/spool/asterisk/monitor/`.
+
+## Dynamic Queue Members
+
+Agents can log in/out of queues:
+
+### Login to Queue
+```conf
+exten => *75,1,Answer()
+same => n,AddQueueMember(recepcion,Local/${CALLERID(num)}@from-queue)
+same => n,Playback(agent-loginok)
+same => n,Hangup()
+```
+
+### Logout from Queue  
+```conf
+exten => *76,1,Answer()
+same => n,RemoveQueueMember(recepcion,Local/${CALLERID(num)}@from-queue)
+same => n,Playback(agent-loggedoff)
+same => n,Hangup()
+```
+
+### Pause/Unpause in Queue
+```conf
+; Pause
+exten => *77,1,PauseQueueMember(recepcion,Local/${CALLERID(num)}@from-queue)
+
+; Unpause
+exten => *78,1,UnpauseQueueMember(recepcion,Local/${CALLERID(num)}@from-queue)
+```
+
+## Queue Management Commands
+
+### Show All Queues
+```
+CLI> queue show
+```
+
+### Show Specific Queue
+```
+CLI> queue show recepcion
+```
+
+### Add Member
+```
+CLI> queue add member SIP/oscar to recepcion
+```
+
+### Remove Member
+```
+CLI> queue remove member SIP/oscar from recepcion
+```
+
+### Reload Configuration
+```
+CLI> queue reload all
+```
+
+## Testing the Queue
+
+<Steps>
+  <Step title="Verify queue is loaded">
+    ```
+    CLI> queue show recepcion
+    ```
+    
+    Should show 2 members (javier and belen).
+  </Step>
+
+  <Step title="Call the queue">
+    From extension 'exterior', dial 995554444.
+    
+    Expected:
+    - Call is answered
+    - Music on hold plays (from recepcion directory)
+    - javier's phone rings (if he answered last call)
+    - If javier doesn't answer in 30 seconds, belen's phone rings
+  </Step>
+
+  <Step title="Monitor queue activity">
+    ```
+    CLI> queue show recepcion
+    ```
+    
+    Shows:
+    - Number of calls in queue
+    - Which members are on calls
+    - Call statistics
+  </Step>
+</Steps>
+
+## Queue Statistics
+
+View detailed queue statistics:
+
+```
+CLI> queue show recepcion
+```
+
+Shows:
+- Current calls in queue
+- Longest hold time
+- Calls completed
+- Calls abandoned
+- Service level
+- Member status (Available, In use, Paused)
+
+<Info>
+Queue logs are written to `/var/log/asterisk/queue_log` for detailed analysis and reporting.
+</Info>
+
+## Best Practices
+
+1. **Set reasonable timeouts** - 20-30 seconds per member
+2. **Limit queue length** - Use `maxlen` to prevent excessive wait times
+3. **Announce position** - Keep callers informed
+4. **Monitor abandonment** - High abandonment indicates issues
+5. **Use appropriate strategy** - Match to your business needs
+6. **Test music on hold** - Ensure audio files work correctly
+7. **Record calls** - For quality and training purposes
+8. **Review queue logs** - Identify peak times and staffing needs
+
+## Troubleshooting
+
+**Music doesn't play:**
+- Check music directory exists and contains audio files
+- Verify file permissions
+- Run `moh show classes` to confirm class is loaded
+
+**Calls don't distribute:**
+- Check member status with `queue show`
+- Verify members are registered: `sip show peers`
+- Review queue strategy setting
+
+**Queue doesn't reload:**
+- Check for syntax errors in queues.conf
+- Review `/var/log/asterisk/messages` for errors

@@ -1,0 +1,101 @@
+---
+title: SIP Softphones
+description: Recommended SIP client applications for testing Asterisk PBX configurations
+---
+
+## Overview
+
+A softphone (combination of *software* and *telephone*) is software used for VoIP communications, whether between softphones or to hardphones (physical VoIP phones). They are very useful because you can test locally, without the need for additional hardware (which usually has a high price), the functionality of the PBX.
+
+## Recommended Softphones
+
+<CardGroup cols={2}>
+  <Card title="Pangolin" icon="desktop">
+    **Platform:** Windows
+    
+    **Price:** Free
+    
+    **Notes:** Has a key disadvantage of instability, but useful for basic testing.
+    
+    [Download Pangolin](https://sip-system.com/en/pc/20-pangolin.html)
+  </Card>
+
+  <Card title="ZoiPer" icon="phone">
+    **Platform:** Windows, macOS, Linux, iOS, Android
+    
+    **Price:** Free for calls, paid for advanced features
+    
+    **Notes:** Very stable and easy to use. Available for both desktop and smartphone platforms.
+    
+    [Download ZoiPer](https://www.zoiper.com/)
+  </Card>
+
+  <Card title="3CX" icon="mobile">
+    **Platform:** Windows
+    
+    **Price:** Free
+    
+    **Notes:** Fast, stable, simple and comfortable to use. Simulates one of the first iPhones.
+    
+    [Download 3CX](https://www.3cx.es/voip-telefono/softphone/)
+  </Card>
+
+  <Card title="Blink" icon="certificate">
+    **Platform:** Windows
+    
+    **Price:** Free
+    
+    **Notes:** Comfortable to use especially when working with TLS certificates.
+    
+    [Download Blink](http://icanblink.com/)
+  </Card>
+</CardGroup>
+
+## Mobile Options
+
+<AccordionGroup>
+  <Accordion title="Sipnetic (Android)">
+    The most comfortable SIP client for smartphone use.
+    
+    - **Price:** Free for calls and messages, paid for advanced features
+    - **Platform:** Android
+    - **Best for:** General mobile VoIP usage
+    
+    [Download from Google Play](https://play.google.com/store/apps/details?id=com.sipnetic.app)
+  </Accordion>
+
+  <Accordion title="MizuDroid (Android)">
+    Useful when you need to send SIP messages.
+    
+    - **Price:** Free
+    - **Platform:** Android
+    - **Best for:** SIP messaging functionality
+    
+    [Download from Google Play](https://play.google.com/store/apps/details?id=com.mizuvoip.mizudroid.app&hl=es_419)
+  </Accordion>
+</AccordionGroup>
+
+## Configuration Example
+
+When configuring a softphone to connect to your Asterisk server, you'll typically need:
+
+- **Server/Domain:** Your Asterisk server IP address (e.g., 192.168.1.180)
+- **Username:** Your SIP extension (e.g., javier, belen)
+- **Password:** The secret configured in `sip.conf`
+- **Port:** 5060 (default SIP port)
+- **Transport:** UDP, TCP, or TLS (depending on your configuration)
+
+<Note>
+  For secure calling with TLS, you'll need to import the certificate files (`.pem` and `.crt`) into your softphone. Blink is particularly user-friendly for certificate-based authentication.
+</Note>
+
+## Testing Recommendations
+
+1. **Start Simple:** Begin with basic UDP connections before implementing TLS
+2. **Use Multiple Clients:** Test with at least two different softphones to verify compatibility
+3. **Mobile Testing:** Test mobile clients on actual networks (not just WiFi) to verify NAT traversal
+4. **Feature Testing:** Not all softphones support all features (messaging, call transfer, etc.)
+
+<Tip>
+  ZoiPer and Blink are the most reliable options for testing advanced Asterisk features including voicemail, call transfer, and secure calling.
+</Tip>

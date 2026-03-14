@@ -1,0 +1,446 @@
+---
+title: "voicemail.conf Configuration"
+description: "Complete reference for configuring voicemail boxes and settings in Asterisk"
+---
+
+## Overview
+
+The `voicemail.conf` file configures the voicemail system in Asterisk, including mailbox definitions, storage formats, email notifications, and user settings.
+
+## File Location
+
+```
+/etc/asterisk/voicemail.conf
+```
+
+## File Structure
+
+The configuration file consists of:
+- **[general]** - Global voicemail settings
+- **[zonemessages]** - Timezone definitions for message timestamps
+- **[context]** - Mailbox definitions grouped by context
+
+## General Section
+
+Defines global voicemail system settings.
+
+<CodeGroup>
+```ini Basic Configuration
+[general]
+format=wav49|gsm|wav
+serveremail=asterisk
+attach=yes
+skipms=3000
+maxsilence=10
+silencethreshold=128
+maxlogins=3
+```
+
+```ini Email Settings
+[general]
+format=wav49|gsm|wav
+serveremail=voicemail@company.com
+attach=yes
+emailbody=Dear ${VM_NAME}:\n\nYou have a new voicemail.\n
+emailsubject=[PBX]: New voicemail in mailbox ${VM_MAILBOX}
+```
+
+```ini Advanced Options
+[general]
+format=wav49|gsm|wav
+skipms=3000
+maxsilence=10
+silencethreshold=128
+maxlogins=3
+sendvoicemail=yes
+emaildateformat=%A, %B %d, %Y at %r
+pagerdateformat=%A, %B %d, %Y at %r
+```
+</CodeGroup>
+
+### General Section Parameters
+
+<ParamField path="format" type="string" default="wav">
+  Audio format(s) for storing voicemail messages. Separate multiple formats with `|`. Common formats:
+  - `wav` - Uncompressed WAV (best quality, large files)
+  - `wav49` - GSM-compressed WAV (good quality, smaller)
+  - `gsm` - GSM codec (highly compressed)
+  - `mp3` - MP3 format (requires encoding support)
+</ParamField>
+
+<ParamField path="serveremail" type="string" default="asterisk">
+  Email address used as the sender for voicemail notifications
+</ParamField>
+
+<ParamField path="attach" type="boolean" default="yes">
+  Attach the voicemail audio file to email notifications
+</ParamField>
+
+<ParamField path="skipms" type="integer" default="3000">
+  Milliseconds to skip forward/backward when using fast-forward/rewind (default 3 seconds)
+</ParamField>
+
+<ParamField path="maxsilence" type="integer" default="10">
+  Maximum silence duration in seconds before ending message recording
+</ParamField>
+
+<ParamField path="silencethreshold" type="integer" default="128">
+  Silence detection threshold (0-32767). Lower values detect softer sounds as non-silence
+</ParamField>
+
+<ParamField path="maxlogins" type="integer" default="3">
+  Maximum failed login attempts before disconnecting
+</ParamField>
+
+<ParamField path="sendvoicemail" type="boolean" default="no">
+  Allow users to compose and send voicemail to other users from within VoiceMailMain
+</ParamField>
+
+<ParamField path="emaildateformat" type="string">
+  Date format for email notifications using strftime format codes
+  
+  Common codes:
+  - `%A` - Full weekday name
+  - `%B` - Full month name
+  - `%d` - Day of month
+  - `%Y` - Four-digit year
+  - `%r` - 12-hour time with AM/PM
+</ParamField>
+
+<ParamField path="pagerdateformat" type="string">
+  Date format for pager notifications
+</ParamField>
+
+<ParamField path="emailbody" type="string">
+  Custom email body template. Use variables:
+  - `${VM_NAME}` - Mailbox owner name
+  - `${VM_MAILBOX}` - Mailbox number
+  - `${VM_CALLERID}` - Caller ID of message sender
+  - `${VM_DUR}` - Message duration
+  - `${VM_DATE}` - Message date/time
+</ParamField>
+
+<ParamField path="emailsubject" type="string">
+  Custom email subject line template
+</ParamField>
+
+## Zone Messages
+
+Define timezone formats for message timestamp announcements.
+
+<CodeGroup>
+```ini US Timezones
+[zonemessages]
+eastern=America/New_York|'vm-received' Q 'digits/at' IMp
+central=America/Chicago|'vm-received' Q 'digits/at' IMp
+central24=America/Chicago|'vm-received' q 'digits/at' H N 'hours'
+military=Zulu|'vm-received' q 'digits/at' H N 'hours' 'phonetic/z_p'
+```
+
+```ini European Timezones
+[zonemessages]
+european=Europe/Copenhagen|'vm-received' a d b 'digits/at' HM
+london=Europe/London|'vm-received' a d b 'digits/at' HM
+paris=Europe/Paris|'vm-received' a d b 'digits/at' HM
+```
+</CodeGroup>
+
+### Timezone Format Syntax
+
+```
+zone_name=Timezone|'prompt' format_codes
+```
+
+- **zone_name** - Unique identifier for this timezone
+- **Timezone** - IANA timezone name (e.g., `America/New_York`)
+- **'prompt'** - Audio file to play before timestamp
+- **format_codes** - Timestamp format using Say() application codes
+
+<Accordion title="Format Code Reference">
+  Common timestamp format codes:
+  - `A` - Full day name
+  - `a` - Abbreviated day name
+  - `B` - Full month name
+  - `b` - Abbreviated month name
+  - `d` - Day of month
+  - `Y` - Four-digit year
+  - `I` - Hour (12-hour)
+  - `H` - Hour (24-hour)
+  - `M` - Minutes
+  - `p` - AM/PM
+  - `Q` - "today", "yesterday", or date
+  - `q` - "" (for today), "yesterday", or date
+</Accordion>
+
+## Mailbox Definitions
+
+Mailboxes are defined in context sections, typically `[default]`.
+
+<CodeGroup>
+```ini Basic Mailboxes
+[default]
+4000 => 1234,Javier,javier@ejemplo.com
+4001 => 1234,Belen,belen@ejemplo.com
+```
+
+```ini With Pager Email
+[default]
+4000 => 1234,Javier Smith,javier@ejemplo.com,javier-pager@ejemplo.com
+4001 => 1234,Belen Garcia,belen@ejemplo.com,belen-pager@ejemplo.com
+```
+
+```ini With Timezone
+[default]
+4000 => 1234,Javier,javier@ejemplo.com,,eastern
+4001 => 1234,Belen,belen@ejemplo.com,,central
+```
+
+```ini Multiple Contexts
+[default]
+1000 => 5678,Reception,reception@company.com
+
+[employees]
+4000 => 1234,Javier,javier@company.com
+4001 => 1234,Belen,belen@company.com
+
+[managers]
+5000 => 9999,Director,director@company.com
+```
+</CodeGroup>
+
+### Mailbox Syntax
+
+```
+mailbox => password,name,email,pager_email,options
+```
+
+<ParamField path="mailbox" type="string" required>
+  Mailbox number/identifier. Must match extension in dialplan
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  Numeric PIN for accessing voicemail
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Full name of mailbox owner
+</ParamField>
+
+<ParamField path="email" type="string">
+  Email address for voicemail notifications
+</ParamField>
+
+<ParamField path="pager_email" type="string">
+  Pager/SMS email address for short notifications
+</ParamField>
+
+<ParamField path="options" type="string">
+  Additional options:
+  - Timezone name from `[zonemessages]`
+  - `attach=yes|no` - Override global attach setting
+  - `delete=yes|no` - Delete messages after emailing
+</ParamField>
+
+## Contexts
+
+Mailboxes can be organized into different contexts for security and organization.
+
+```ini
+[default]
+; General mailboxes
+1000 => 1111,Main Office,office@company.com
+
+[employees]
+; Employee mailboxes
+4000 => 1234,Javier,javier@company.com
+4001 => 1234,Belen,belen@company.com
+4002 => 1234,Paul,paul@company.com
+
+[managers]
+; Management mailboxes with higher security
+5000 => 9876,Director,director@company.com
+5001 => 9877,Manager,manager@company.com
+
+[support]
+; Support team mailboxes
+6000 => 4444,Support Team,support@company.com
+```
+
+<Accordion title="Context Usage in Dialplan">
+  Reference mailboxes with context using the format `mailbox@context`:
+  
+  ```ini
+  ; extensions.conf
+  [empleado]
+  exten => 4000,1,Dial(SIP/javier,20)
+  same => n,VoiceMail(4000@employees)
+  
+  exten => *4000,1,VoiceMailMain(4000@employees)
+  ```
+  
+  If no context is specified, `default` is used.
+</Accordion>
+
+## Voicemail Access from Dialplan
+
+### Leaving Messages
+
+<CodeGroup>
+```ini Basic Voicemail Deposit
+exten => 4000,1,Dial(SIP/javier,20)
+ same => n,VoiceMail(4000)
+ same => n,Hangup()
+```
+
+```ini Unavailable vs Busy
+exten => 4000,1,Dial(SIP/javier,20)
+ same => n,Goto(4000-${DIALSTATUS},1)
+
+exten => 4000-NOANSWER,1,VoiceMail(4000,u)
+exten => 4000-BUSY,1,VoiceMail(4000,b)
+```
+
+```ini With Context
+exten => 4000,1,Dial(SIP/javier,20)
+ same => n,VoiceMail(4000@employees,u)
+```
+</CodeGroup>
+
+### VoiceMail() Options
+
+<ParamField path="u" type="option">
+  Play "unavailable" greeting
+</ParamField>
+
+<ParamField path="b" type="option">
+  Play "busy" greeting
+</ParamField>
+
+<ParamField path="s" type="option">
+  Skip greeting and instructions, go straight to recording
+</ParamField>
+
+### Accessing Messages
+
+<CodeGroup>
+```ini VoiceMailMain Access
+; Access own mailbox
+exten => *97,1,VoiceMailMain()
+ same => n,Hangup()
+
+; Access specific mailbox
+exten => *4000,1,VoiceMailMain(4000)
+ same => n,Hangup()
+
+exten => *4001,1,VoiceMailMain(4001)
+ same => n,Hangup()
+```
+
+```ini With Context
+exten => *4000,1,VoiceMailMain(4000@employees)
+ same => n,Hangup()
+```
+</CodeGroup>
+
+## Email Notification Templates
+
+<CodeGroup>
+```ini Custom Email Body
+[general]
+emailbody=Dear ${VM_NAME}:\n\n\tYou have received a new \
+voicemail message in mailbox ${VM_MAILBOX}.\n\n\tFrom: ${VM_CALLERID}\
+\n\tDate: ${VM_DATE}\n\tDuration: ${VM_DUR}\n\n\tPlease check your \
+voicemail as soon as possible.\n\nThank you!
+```
+
+```ini Custom Subject Line
+[general]
+emailsubject=[Company PBX] New voicemail ${VM_MAILBOX} from ${VM_CALLERID}
+```
+
+```ini HTML Email
+[general]
+emailbody=<!DOCTYPE html><html><body>
+email_content_type=html
+```
+</CodeGroup>
+
+## Storage and File Management
+
+### Storage Location
+
+Voicemail messages are stored in:
+```
+/var/spool/asterisk/voicemail/[context]/[mailbox]/
+```
+
+Directory structure:
+```
+/var/spool/asterisk/voicemail/default/4000/
+├── INBOX/
+│   ├── msg0000.txt
+│   ├── msg0000.wav
+│   ├── msg0001.txt
+│   └── msg0001.wav
+├── Old/
+├── Work/
+├── Family/
+├── Friends/
+└── unavail.wav
+```
+
+### Storage Formats
+
+<Accordion title="Audio Format Selection">
+  The `format` parameter determines storage formats:
+  
+  - **wav** - Best quality, largest files (~10MB/min)
+  - **wav49** - GSM compressed WAV (~1.5MB/min) - good balance
+  - **gsm** - Smallest files (~500KB/min), lower quality
+  - **Multiple formats** - `wav49|gsm|wav` stores in all formats
+  
+  Use multiple formats if you need flexibility for different playback methods.
+</Accordion>
+
+## Complete Example
+
+```ini voicemail.conf
+[general]
+format=wav49|gsm|wav
+serveremail=voicemail@company.com
+attach=yes
+skipms=3000
+maxsilence=10
+silencethreshold=128
+maxlogins=3
+emaildateformat=%A, %B %d, %Y at %r
+pagerdateformat=%A, %B %d, %Y at %r
+sendvoicemail=yes
+
+; Email template
+emailsubject=[Company PBX]: New voicemail in mailbox ${VM_MAILBOX}
+emailbody=Dear ${VM_NAME}:\n\nYou have a new voicemail message.\n\n\
+From: ${VM_CALLERID}\nDuration: ${VM_DUR}\nDate: ${VM_DATE}\n\n\
+Please check your voicemail at your earliest convenience.
+
+[zonemessages]
+eastern=America/New_York|'vm-received' Q 'digits/at' IMp
+central=America/Chicago|'vm-received' Q 'digits/at' IMp
+european=Europe/Copenhagen|'vm-received' a d b 'digits/at' HM
+
+[default]
+1000 => 9999,Reception,reception@company.com
+
+[employees]
+4000 => 1234,Javier,javier@company.com,,eastern
+4001 => 1234,Belen,belen@company.com,,eastern
+4002 => 1234,Paul,paul@company.com,,central
+
+[managers]
+5000 => 8888,Director,director@company.com,,eastern
+```
+
+## Related Configuration
+
+- [extensions.conf](/config/extensions-conf) - Configure voicemail access in dialplan
+- [sip.conf](/config/sip-conf) - SIP endpoint configuration

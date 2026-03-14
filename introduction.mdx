@@ -1,0 +1,148 @@
+---
+title: Introduction to Asterisk
+description: Learn what Asterisk is and what this tutorial covers
+---
+
+## What is Asterisk?
+
+Asterisk is an open-source **Private Branch Exchange (PBX)** software that enables you to build your own telephone system. It's a powerful communications platform that can handle voice calls, video calls, messaging, and more over IP networks.
+
+With Asterisk, you can:
+
+- Create a complete phone system for your organization
+- Connect internal extensions for inter-office communication
+- Implement advanced features like voicemail, call forwarding, and call queues
+- Integrate with external telephone networks
+- Build custom call center solutions
+
+## What This Tutorial Covers
+
+This tutorial provides a comprehensive guide to installing and configuring Asterisk, covering everything from basic setup to advanced features. The tutorial is organized into progressive modules to help you understand each concept before moving to the next.
+
+<Note>
+This tutorial was originally developed as a university project and has been shared to help others learn Asterisk configuration. While the author was new to PBX systems at the time of writing, the tutorial has been tested and validated.
+</Note>
+
+### Key Topics
+
+You'll learn how to:
+
+- Install Asterisk and its dependencies
+- Configure users and extensions
+- Set up voicemail and call forwarding
+- Implement group calling and call pickup
+- Enable text-to-speech with Festival
+- Secure calls with TLS encryption
+- Create call queues and distribution systems
+- Integrate with MariaDB databases
+- Connect multiple PBX systems with DUNDi
+- Build a complete call center solution
+
+## Technical Specifications
+
+This tutorial uses the following environment:
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| Operating System | Debian 9.11 (Stretch) | No graphical interface |
+| Asterisk | 15.7.1 | Downloaded from official sources |
+| Hypervisor | VMware Workstation 14 Player | Network mode: Bridged |
+| Shell | GNU bash 4.4.12 | x86_64-pc-linux-gnu |
+
+<Warning>
+The tutorial uses Debian 9.11 and Asterisk 15.7.1. While the concepts remain valid, some commands and configurations may differ in newer versions.
+</Warning>
+
+## Prerequisites
+
+Before starting this tutorial, you should have:
+
+### System Requirements
+
+- A Debian 9.11 installation (physical or virtual machine)
+- At least 1GB of RAM
+- 10GB of disk space
+- Network connectivity
+- Root or sudo access
+
+### Knowledge Requirements
+
+- Basic Linux command line skills
+- Familiarity with text editors like `vim` or `nano`
+- Understanding of networking concepts (IP addresses, ports)
+- Basic knowledge of SIP protocol (helpful but not required)
+
+### Initial Setup
+
+The tutorial assumes you have already:
+
+1. **Installed sudo** for easier system administration:
+
+```bash
+$ su
+$ apt-get install sudo
+$ adduser username sudo
+```
+
+2. **Configured a static IP address** for your server (recommended for SSH access)
+
+3. **Set up SSH access** using OpenSSH for remote management
+
+## Command Notation
+
+Throughout this tutorial, commands are prefixed with symbols to indicate where they should be executed:
+
+- **$** (dollar sign): Linux terminal commands
+  ```bash
+  $ sudo apt update
+  ```
+
+- **:** (colon): vim editor commands
+  ```
+  : wq
+  ```
+
+- **CLI>**: Asterisk console commands
+  ```
+  CLI> sip reload
+  ```
+
+- **MariaDB>**: MariaDB database commands
+  ```mariadb
+  MariaDB> SHOW DATABASES;
+  ```
+
+- **Quoted text**: Configuration file content
+  > This is content to add
+  > to a configuration file
+
+## Softphones for Testing
+
+To test your Asterisk installation, you'll need SIP client software (softphones). The tutorial uses:
+
+- **Pangolin** - Desktop softphone for PC
+- **Zoiper** - Cross-platform softphone (desktop and mobile)
+- **Blink** - Advanced SIP client with TLS support
+- **MicroSIP** - Lightweight Windows client
+
+<Tip>
+We recommend having at least two softphones (on different devices) to test calling between extensions.
+</Tip>
+
+## Getting Help
+
+If you encounter issues or have questions:
+
+- Check the [Problems and Solutions](#) section for common issues
+- Review the official [Asterisk documentation](https://www.asterisk.org/)
+- Consult the [Bibliography](#) section for additional resources
+
+## Next Steps
+
+<Card title="Quick Start" icon="rocket" href="/quickstart">
+  Jump right in with a basic Asterisk installation and make your first call between two users
+</Card>
+
+<Card title="Full Installation Guide" icon="book" href="#">
+  Follow the complete step-by-step installation process with detailed explanations
+</Card>

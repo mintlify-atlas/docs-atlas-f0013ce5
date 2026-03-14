@@ -1,0 +1,260 @@
+---
+title: Asterisk User Creation
+description: Create a dedicated system user to run Asterisk securely without root privileges
+---
+
+By default, Asterisk runs as the root user, which poses security risks. Creating a dedicated `asterisk` user follows security best practices and limits potential damage from vulnerabilities.
+
+## Why Create a Dedicated User?
+
+Running Asterisk as a non-root user:
+- **Limits privileges**: Reduces system access if compromised
+- **Improves security**: Follows principle of least privilege
+- **Industry standard**: Recommended by Asterisk documentation
+- **Isolates permissions**: Contains potential security issues
+
+## Create Asterisk User
+
+Create a system user specifically for running Asterisk:
+
+```bash
+sudo adduser --system --group --home /var/lib/asterisk --no-create-home --gecos "Asterisk PBX" asterisk
+```
+
+### Command Breakdown
+
+- `--system`: Creates a system user (not a login user)
+- `--group`: Creates a group with the same name
+- `--home /var/lib/asterisk`: Sets home directory
+- `--no-create-home`: Doesn't create the home directory (already exists)
+- `--gecos "Asterisk PBX"`: Sets the user description
+- `asterisk`: The username
+
+## Configure Asterisk Defaults
+
+Tell Asterisk to run as the new user:
+
+```bash
+sudo vim /etc/default/asterisk
+```
+
+Uncomment these lines:
+
+```bash
+AST_USER="asterisk"
+AST_GROUP="asterisk"
+```
+
+These settings ensure Asterisk starts with the correct user and group permissions.
+
+## Add User to Required Groups
+
+The `asterisk` user needs access to audio and serial devices:
+
+```bash
+sudo usermod -a -G dialout,audio asterisk
+```
+
+### Group Purposes
+
+- **dialout**: Access to serial ports and modems (for telephony hardware)
+- **audio**: Access to sound devices (for audio processing)
+
+## Set File Ownership
+
+Change ownership of all Asterisk files and directories:
+
+```bash
+sudo chown -R asterisk: /var/{lib,log,run,spool}/asterisk /usr/lib/asterisk /etc/asterisk
+```
+
+This command changes ownership of:
+- `/var/lib/asterisk` - Runtime libraries and databases
+- `/var/log/asterisk` - Log files
+- `/var/run/asterisk` - PID and socket files
+- `/var/spool/asterisk` - Voicemail and recordings
+- `/usr/lib/asterisk` - Modules and libraries
+- `/etc/asterisk` - Configuration files
+
+## Set File Permissions
+
+Set appropriate permissions to secure Asterisk files:
+
+```bash
+sudo chmod -R 750 /var/{lib,log,run,spool}/asterisk /usr/lib/asterisk /etc/asterisk
+```
+
+### Permission Breakdown (750)
+
+- **7** (owner): Read, write, execute
+- **5** (group): Read, execute
+- **0** (others): No access
+
+This ensures only the `asterisk` user and group can access these files.
+
+## Starting Asterisk
+
+Now you can start Asterisk as the dedicated user:
+
+```bash
+sudo /etc/init.d/asterisk start
+```
+
+## Accessing Asterisk CLI
+
+Connect to the Asterisk Command Line Interface:
+
+<CodeGroup>
+
+```bash Verbose Mode
+sudo asterisk -rvvvvvvc
+```
+
+```bash Normal Mode
+sudo asterisk -r
+```
+
+</CodeGroup>
+
+### CLI Options
+
+- `-r`: Reconnect to running Asterisk
+- `-v`: Increase verbosity (more v's = more verbose)
+- `-c`: Provide console output
+
+## Enable Automatic Startup
+
+Configure Asterisk to start automatically on system boot:
+
+```bash
+sudo systemctl enable asterisk
+```
+
+## Service Management
+
+Control the Asterisk service with these commands:
+
+<CodeGroup>
+
+```bash Start Service
+sudo /etc/init.d/asterisk start
+```
+
+```bash Stop Service
+sudo /etc/init.d/asterisk stop
+```
+
+```bash Restart Service
+sudo /etc/init.d/asterisk restart
+```
+
+```bash Reload Configuration
+sudo /etc/init.d/asterisk reload
+```
+
+```bash Force Reload
+sudo /etc/init.d/asterisk force-reload
+```
+
+```bash Check Status
+sudo /etc/init.d/asterisk status
+```
+
+</CodeGroup>
+
+## Verify User Configuration
+
+Check that Asterisk is running as the correct user:
+
+```bash
+ps aux | grep asterisk
+```
+
+You should see processes running as the `asterisk` user, not `root`.
+
+## Backup Configuration Files
+
+Before making changes, always backup configuration files:
+
+```bash
+cd /etc/asterisk
+sudo cp fichero.conf fichero.conf.bck
+```
+
+Replace `fichero` with the actual filename (e.g., `sip.conf`, `extensions.conf`).
+
+## Clean Configuration Files
+
+Asterisk configuration files contain many comments. Remove them for easier editing:
+
+```bash
+sudo vim /etc/asterisk/fichero.conf
+```
+
+In vim, use these commands:
+
+```vim
+:g/^\s*;/d
+```
+Removes comment lines.
+
+```vim
+:g/^$/d
+```
+Removes empty lines.
+
+```vim
+:wq
+```
+Saves and exits.
+
+<Warning>
+Only clean configuration files **after** making a backup. These operations cannot be undone easily.
+</Warning>
+
+## Troubleshooting
+
+### Permission Denied Errors
+
+If you see permission errors:
+
+```bash
+sudo chown -R asterisk:asterisk /var/run/asterisk
+sudo chmod -R 755 /var/run/asterisk
+```
+
+### Cannot Connect to Asterisk
+
+If `asterisk -r` fails:
+
+1. Check if Asterisk is running:
+   ```bash
+   sudo systemctl status asterisk
+   ```
+
+2. Check socket file exists:
+   ```bash
+   ls -l /var/run/asterisk/asterisk.ctl
+   ```
+
+3. Verify permissions:
+   ```bash
+   ls -l /var/run/asterisk/
+   ```
+
+## Security Best Practices
+
+<Note>
+- Never run Asterisk as root in production
+- Regularly update Asterisk for security patches
+- Use strong passwords for SIP accounts
+- Limit network access with firewalls
+- Monitor logs for suspicious activity
+</Note>
+
+## Next Steps
+
+With the asterisk user configured:
+- [Configure Spanish language support](/setup/language-configuration)
+- Start configuring SIP peers
+- Create your dialplan

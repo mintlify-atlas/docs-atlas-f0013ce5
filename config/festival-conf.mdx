@@ -1,0 +1,501 @@
+---
+title: "Festival TTS Configuration"
+description: "Complete reference for configuring Festival text-to-speech synthesis in Asterisk"
+---
+
+## Overview
+
+Festival is a text-to-speech (TTS) synthesis system that can be integrated with Asterisk to convert text into spoken audio. This allows your PBX to dynamically generate speech for announcements, prompts, and information playback.
+
+## Festival Installation
+
+Festival must be installed separately from Asterisk.
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install festival festival-dev
+
+# Red Hat/CentOS
+sudo yum install festival festival-devel
+```
+
+## Configuration Files
+
+Festival configuration involves two main files:
+- **festival.scm** - Festival server configuration
+- **Asterisk dialplan** - Integration with Asterisk
+
+## Festival Server Configuration
+
+### File Location
+
+The Festival configuration can be placed in:
+- `/etc/festival.scm` - System-wide configuration
+- `/usr/share/festival/festival.scm` - Festival installation directory
+
+### Basic Configuration
+
+<CodeGroup>
+```scheme Basic Server (festival.scm)
+; Maximum number of clients
+(set! server_max_clients 10)
+
+; Server port
+(set! server_port 1314)
+
+; Server access list (hosts allowed to connect)
+(set! server_access_list '("127.0.0.1" "localhost"))
+
+; Audio output method
+(Parameter.set 'Audio_Method 'Audio_Command)
+(Parameter.set 'Audio_Command "aplay -q -c 1 -t raw -f s16 -r $SR $FILE")
+```
+
+```scheme Spanish Voice
+; Use Spanish voice
+(set! voice_default 'voice_JuntaDeAndalucia_es_sf_diphone)
+
+; Audio configuration
+(Parameter.set 'Audio_Command "aplay -q -c 1 -t raw -f s16 -r $SR $FILE")
+(Parameter.set 'Audio_Method 'Audio_Command)
+```
+
+```scheme Secure Configuration
+; Server port
+(set! server_port 1314)
+
+; Server password
+(set! server_passwd "mySecurePassword123")
+
+; Restricted access list
+(set! server_access_list '("127.0.0.1" "localhost" "192.168.1.*"))
+
+; Log file
+(set! server_log_file "/var/log/festival/festival.log")
+```
+</CodeGroup>
+
+## Festival Configuration Parameters
+
+<ParamField path="server_max_clients" type="integer" default="10">
+  Maximum number of simultaneous client connections
+</ParamField>
+
+<ParamField path="server_port" type="integer" default="1314">
+  TCP port for Festival server to listen on
+</ParamField>
+
+<ParamField path="server_passwd" type="string">
+  Password required for client connections (optional but recommended)
+</ParamField>
+
+<ParamField path="server_access_list" type="list">
+  List of IP addresses or patterns allowed to connect. Examples:
+  - `"127.0.0.1"` - Localhost only
+  - `"192.168.1.*"` - Entire subnet
+  - `"[^.]+"` - Any single hostname
+</ParamField>
+
+<ParamField path="server_log_file" type="string">
+  Path to Festival server log file
+</ParamField>
+
+<ParamField path="voice_default" type="symbol">
+  Default voice to use for synthesis. Common options:
+  - `voice_kal_diphone` - US English male
+  - `voice_rab_diphone` - British English male
+  - `voice_don_diphone` - British English male (RP)
+  - `voice_JuntaDeAndalucia_es_sf_diphone` - Spanish
+</ParamField>
+
+<ParamField path="Audio_Method" type="symbol">
+  Audio output method:
+  - `Audio_Command` - Use external command for playback
+  - `netaudio` - Network audio
+  - `sunaudio` - Sun audio device
+</ParamField>
+
+<ParamField path="Audio_Command" type="string">
+  Command to execute for audio playback. Variables:
+  - `$FILE` - Audio file path
+  - `$SR` - Sample rate
+</ParamField>
+
+## Security Warning
+
+<Warning>
+  Running Festival as a network server exposes your system to potential security vulnerabilities. The Festival server can execute arbitrary Scheme code, which could be exploited by attackers.
+  
+  **Security recommendations:**
+  - Only run Festival server on localhost (`127.0.0.1`)
+  - Use firewall rules to restrict access
+  - Set a strong password with `server_passwd`
+  - Limit `server_access_list` to trusted IPs only
+  - Run Festival as a non-privileged user
+  - Keep Festival updated
+</Warning>
+
+## Starting Festival Server
+
+### Manual Start
+
+```bash
+# Start Festival server
+festival --server &
+
+# Start with specific configuration
+festival --server /etc/festival.scm &
+```
+
+### Systemd Service
+
+Create `/etc/systemd/system/festival.service`:
+
+```ini festival.service
+[Unit]
+Description=Festival Speech Synthesis Server
+After=network.target
+
+[Service]
+Type=simple
+User=festival
+ExecStart=/usr/bin/festival --server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the service:
+
+```bash
+sudo systemctl enable festival
+sudo systemctl start festival
+sudo systemctl status festival
+```
+
+## Available Voices
+
+Festival supports multiple languages and voice types.
+
+### Checking Installed Voices
+
+```bash
+# List available voices
+festival
+(voice.list)
+(quit)
+```
+
+### Common Voices
+
+<AccordionGroup>
+  <Accordion title="English Voices">
+    **US English:**
+    - `voice_kal_diphone` - Male (Kevin)
+    - `voice_cmu_us_slt_arctic_hts` - Female (SLT)
+    
+    **British English:**
+    - `voice_rab_diphone` - Male (RP accent)
+    - `voice_don_diphone` - Male (RP accent)
+    
+    ```scheme
+    (set! voice_default 'voice_kal_diphone)
+    ```
+  </Accordion>
+
+  <Accordion title="Spanish Voices">
+    **Spanish:**
+    - `voice_JuntaDeAndalucia_es_sf_diphone` - Spanish female
+    
+    Installation:
+    ```bash
+    sudo apt-get install festvox-ellpc11k
+    ```
+    
+    Configuration:
+    ```scheme
+    (set! voice_default 'voice_JuntaDeAndalucia_es_sf_diphone)
+    ```
+  </Accordion>
+
+  <Accordion title="Other Languages">
+    Festival supports many languages through additional voice packages:
+    
+    - German: `festvox-*-de-*`
+    - French: `festvox-*-fr-*`
+    - Italian: `festvox-*-it-*`
+    - Czech: `festvox-czech-*`
+    - Russian: `festvox-ru`
+    
+    Search for available packages:
+    ```bash
+    apt-cache search festvox
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Asterisk Integration
+
+Integrate Festival with Asterisk using the dialplan.
+
+### Festival() Application
+
+<CodeGroup>
+```ini Basic TTS
+[menu]
+exten => 100,1,Answer()
+ same => n,Festival("Welcome to ACME Corporation. Please hold.")
+ same => n,Hangup()
+```
+
+```ini Dynamic Text
+[greeting]
+exten => s,1,Answer()
+ same => n,Set(HOUR=${STRFTIME(${EPOCH},,%H)})
+ same => n,GotoIf($[${HOUR} < 12]?morning:afternoon)
+ same => n(morning),Festival("Good morning. Thank you for calling.")
+ same => n,Goto(continue)
+ same => n(afternoon),Festival("Good afternoon. Thank you for calling.")
+ same => n(continue),Hangup()
+```
+
+```ini Variable Interpolation
+[tts]
+exten => 200,1,Answer()
+ same => n,Set(CALLER_NAME=${CALLERID(name)})
+ same => n,Festival("Hello ${CALLER_NAME}, your call is important to us.")
+ same => n,Hangup()
+```
+</CodeGroup>
+
+### festival.conf (Asterisk)
+
+Configure Asterisk's Festival client in `/etc/asterisk/festival.conf`:
+
+```ini festival.conf
+[general]
+host=localhost
+port=1314
+;password=mySecurePassword123
+```
+
+<ParamField path="host" type="string" default="localhost">
+  Hostname or IP address of Festival server
+</ParamField>
+
+<ParamField path="port" type="integer" default="1314">
+  TCP port of Festival server
+</ParamField>
+
+<ParamField path="password" type="string">
+  Password for Festival server authentication (if configured)
+</ParamField>
+
+## Advanced Usage
+
+### Custom Pronunciations
+
+Create custom pronunciation dictionaries:
+
+```scheme
+; Add custom word pronunciations
+(lex.add.entry 
+  '("ACME" n (((ey) 1) ((k) 0) ((m iy) 0))))
+
+(lex.add.entry
+  '("VoIP" n (((v oy) 1) ((p) 0))))
+```
+
+### Speech Rate Control
+
+```scheme
+; Adjust speaking rate (1.0 = normal)
+(Parameter.set 'Duration_Stretch 1.2)  ; Slower
+(Parameter.set 'Duration_Stretch 0.8)  ; Faster
+```
+
+### Voice Characteristics
+
+```scheme
+; Adjust pitch
+(set! int_lr_params
+  '((target_f0_mean 120) (target_f0_std 30)))
+```
+
+## Testing Festival
+
+### Command Line Test
+
+```bash
+# Test Festival from command line
+echo "Hello, this is a test" | festival --tts
+
+# Test with specific voice
+festival
+(voice_kal_diphone)
+(SayText "Testing the male American voice")
+(quit)
+```
+
+### Asterisk CLI Test
+
+```bash
+# Test from Asterisk CLI
+asterisk -rx 'console dial 100@tts-test'
+
+# Where 100@tts-test is:
+[tts-test]
+exten => 100,1,Answer()
+ same => n,Festival("Testing Festival text to speech")
+ same => n,Hangup()
+```
+
+## Complete Example
+
+### Festival Server Configuration
+
+```scheme /etc/festival.scm
+; Security warning acknowledgment
+; WARNING: Running Festival as a server exposes your system to security risks
+; Only use in trusted networks with proper firewall configuration
+
+; Server configuration
+(set! server_max_clients 10)
+(set! server_port 1314)
+(set! server_passwd "secure_password_here")
+
+; Access control - localhost only for security
+(set! server_access_list '("127.0.0.1" "localhost"))
+
+; Logging
+(set! server_log_file "/var/log/festival/festival.log")
+
+; Audio configuration
+(Parameter.set 'Audio_Command "aplay -q -c 1 -t raw -f s16 -r $SR $FILE")
+(Parameter.set 'Audio_Method 'Audio_Command)
+
+; Use Spanish voice
+(set! voice_default 'voice_JuntaDeAndalucia_es_sf_diphone)
+```
+
+### Asterisk Configuration
+
+```ini /etc/asterisk/festival.conf
+[general]
+host=localhost
+port=1314
+password=secure_password_here
+```
+
+### Dialplan Integration
+
+```ini extensions.conf
+[tts-menu]
+; Information menu using TTS
+exten => 300,1,Answer()
+ same => n,Festival("Bienvenido al sistema de información")
+ same => n,Festival("Presione uno para horarios")
+ same => n,Festival("Presione dos para direcciones")
+ same => n,Festival("Presione tres para hablar con un operador")
+ same => n,WaitExten(5)
+ same => n,Goto(timeout)
+
+exten => 1,1,Festival("Nuestro horario de atención es de lunes a viernes, de 9 a 18 horas")
+ same => n,Hangup()
+
+exten => 2,1,Festival("Nuestra dirección es Calle Principal 123, Madrid")
+ same => n,Hangup()
+
+exten => 3,1,Festival("Le transferimos con un operador")
+ same => n,Dial(SIP/operator,30)
+ same => n,Hangup()
+
+exten => timeout,1,Festival("No hemos recibido ninguna opción. Adiós.")
+ same => n,Hangup()
+
+[time-announcement]
+; Dynamic time announcement
+exten => 400,1,Answer()
+ same => n,Set(TIME=${STRFTIME(${EPOCH},,%H:%M)})
+ same => n,Festival("The current time is ${TIME}")
+ same => n,Hangup()
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Festival Server Won't Start">
+    **Check:**
+    1. Festival is installed: `which festival`
+    2. Port 1314 is available: `netstat -ln | grep 1314`
+    3. Configuration file syntax is correct
+    4. Log directory exists and is writable
+    
+    **Test:**
+    ```bash
+    festival --server
+    # Check for error messages
+    ```
+  </Accordion>
+
+  <Accordion title="Asterisk Can't Connect to Festival">
+    **Check:**
+    1. Festival server is running: `ps aux | grep festival`
+    2. Firewall allows connection to port 1314
+    3. `festival.conf` host and port are correct
+    4. Password matches (if configured)
+    
+    **Test:**
+    ```bash
+    telnet localhost 1314
+    ```
+  </Accordion>
+
+  <Accordion title="No Audio or Garbled Audio">
+    **Check:**
+    1. Audio output method is configured correctly
+    2. ALSA/audio system is working
+    3. Sample rate matches Asterisk (usually 8000 Hz)
+    4. Asterisk has permission to access audio device
+    
+    **Test:**
+    ```bash
+    echo "test" | festival --tts
+    ```
+  </Accordion>
+
+  <Accordion title="Wrong Voice or Language">
+    **Check:**
+    1. Desired voice package is installed
+    2. `voice_default` is set correctly in festival.scm
+    3. Voice name is spelled correctly
+    
+    **List voices:**
+    ```bash
+    festival
+    (voice.list)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Considerations
+
+- Festival synthesis is CPU-intensive
+- Pre-generate common phrases as audio files for better performance
+- Limit concurrent TTS sessions with `server_max_clients`
+- Consider caching synthesized audio
+- For high-volume systems, consider commercial TTS alternatives
+
+## Alternatives to Festival
+
+- **Google TTS** - Cloud-based, high quality
+- **Amazon Polly** - Cloud-based, multiple voices
+- **Microsoft Azure TTS** - Cloud-based, neural voices
+- **Cepstral** - Commercial, high-quality voices
+- **eSpeak** - Lightweight, open source
+
+## Related Configuration
+
+- [extensions.conf](/config/extensions-conf) - Integrate Festival in dialplan

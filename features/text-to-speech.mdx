@@ -1,0 +1,197 @@
+---
+title: Text-to-Speech with Festival
+description: Install and configure Festival TTS for Spanish voice synthesis in Asterisk
+---
+
+Asterisk can convert text to speech using Festival, a free and open-source text-to-speech system. This enables dynamic voice prompts without pre-recording audio files.
+
+## Installing Festival
+
+Install the Festival package on your Debian system:
+
+```bash
+sudo apt-get install festival
+```
+
+After installation, stop Asterisk temporarily:
+
+```bash
+sudo /etc/init.d/asterisk stop
+```
+
+## Configuring Festival for Asterisk
+
+### Modify festival.scm in /usr/share/festival/
+
+Add the following function before the last line (`provide 'festival`) in `/usr/share/festival/festival.scm`:
+
+```scheme
+(define (tts_textasterisk string mode)
+(let ((wholeutt (utt.synth (eval (list 'Utterance 'Text string)))))
+(utt.wave.resample wholeutt 8000)
+(utt.wave.rescale wholeutt 5)
+(utt.send.wave.client wholeutt)))
+```
+
+This function configures Festival to:
+- Resample audio to 8000 Hz (telephony standard)
+- Rescale the waveform by factor of 5
+- Send audio to the client
+
+Reboot the system after making changes:
+
+```bash
+sudo reboot
+```
+
+## Creating a systemd Service
+
+<Steps>
+  <Step title="Create the service file">
+    Festival doesn't create a service by default. Create one at `/etc/systemd/system/festival.service`:
+
+    ```ini
+    [Unit]
+    Description=Servicio para Festival TTS
+    Wants=network.target
+    After=syslog.target network-online.target
+
+    [Service]
+    Type=simple
+    ExecStart=/usr/bin/festival --server
+    Restart=on-failure
+    RestartSec=10
+    KillMode=process
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+  </Step>
+
+  <Step title="Reload and enable the service">
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable festival.service
+    ```
+  </Step>
+
+  <Step title="Reboot and verify">
+    ```bash
+    sudo reboot
+    sudo systemctl status festival.service
+    ```
+
+    The service should be active and running.
+  </Step>
+</Steps>
+
+## Installing Spanish Voices
+
+The voices are provided by Junta de Andalucía and available on GitHub.
+
+<Steps>
+  <Step title="Download the voices">
+    ```bash
+    cd /home/javier/archivos
+    wget https://github.com/franjvasquezg/festival-spanish-voices/archive/master.zip
+    unzip master.zip
+    cd festival-spanish-voices-master/
+    ```
+  </Step>
+
+  <Step title="Install to Festival directory">
+    ```bash
+    sudo mkdir /usr/share/festival/voices/spanish
+    sudo cp -r JuntaDeAndalucia_es_* /usr/share/festival/voices/spanish/
+    sudo chown -R asterisk.asterisk /usr/share/festival/voices/spanish
+    ```
+
+    Two voices are available:
+    - `JuntaDeAndalucia_es_pa_diphone` - Male voice
+    - `JuntaDeAndalucia_es_sf_diphone` - Female voice
+  </Step>
+
+  <Step title="Set default voice">
+    Edit `/etc/festival.scm` and add at the end:
+
+    ```scheme
+    (set! voice_default 'voice_JuntaDeAndalucia_es_sf_diphone)
+    ```
+
+    This sets the female voice as default.
+  </Step>
+
+  <Step title="Restart Festival">
+    ```bash
+    sudo systemctl restart festival.service
+    ```
+  </Step>
+</Steps>
+
+## Integrating with Asterisk
+
+<Steps>
+  <Step title="Enable the Festival module">
+    Navigate to your Asterisk source directory:
+
+    ```bash
+    cd /usr/src/asterisk-15.7.1/
+    sudo make menuselect
+    ```
+
+    Enable **Applications → app_festival** under the Extended section.
+  </Step>
+
+  <Step title="Install and start Asterisk">
+    ```bash
+    sudo make install
+    sudo /etc/init.d/asterisk start
+    ```
+  </Step>
+
+  <Step title="Verify the module">
+    Access the Asterisk CLI:
+
+    ```bash
+    sudo asterisk -rvvvvvvc
+    ```
+
+    Check that the Festival application is loaded:
+
+    ```
+    CLI> core show application festival
+    ```
+
+    If not loaded, load it manually:
+
+    ```
+    CLI> module load app_festival.so
+    ```
+  </Step>
+</Steps>
+
+## Using Festival in Dialplan
+
+In your `extensions.conf`, use the `Festival()` application:
+
+```conf
+exten => 100,1,NoOp(Centralita de distribucion de llamadas)
+same => n,Festival(Va a escuchar un fragmento de la primavera de Antonio Vivaldi)
+same => n,Playback(silence/1)
+same => n,Playback(mimusica/primavera)
+same => n,Hangup()
+```
+
+Reload the dialplan:
+
+```
+CLI> dialplan reload
+```
+
+<Info>
+Festival synthesizes text on-the-fly, so you can create dynamic messages using channel variables and context data.
+</Info>
+
+## Testing
+
+Call extension 100 to hear the Spanish TTS announcement followed by music playback. The Asterisk console will show the Festival synthesis in progress.

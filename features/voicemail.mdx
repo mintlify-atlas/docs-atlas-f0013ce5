@@ -1,0 +1,233 @@
+---
+title: 'Voicemail (Buzón de Voz)'
+description: 'Configure voicemail functionality in Asterisk to allow users to leave and retrieve voice messages'
+icon: 'voicemail'
+---
+
+This guide shows how to configure voicemail in Asterisk so that when a call to an extension is not answered, the caller can leave a voice message.
+
+## Overview
+
+Voicemail allows users to:
+- Receive voice messages when unavailable
+- Access their mailbox using a PIN code
+- Configure personalized greetings
+- Receive email notifications (optional)
+
+## Configuration Files
+
+### voicemail.conf
+
+The `voicemail.conf` file defines mailbox settings and user configurations.
+
+<Steps>
+  <Step title="Edit voicemail.conf">
+    Open the voicemail configuration file:
+    
+    ```bash
+    $ sudo vim /etc/asterisk/voicemail.conf
+    ```
+  </Step>
+
+  <Step title="Configure mailbox format">
+    Each mailbox entry follows this format:
+    
+    ```ini
+    mailbox_number => PIN,Name,email@address
+    ```
+    
+    Where:
+    - **mailbox_number**: Voicemail box number (typically matches extension)
+    - **PIN**: Password to access the mailbox
+    - **Name**: User's name
+    - **email@address**: Email for notifications (optional)
+  </Step>
+
+  <Step title="Add mailboxes">
+    Under the `[default]` context, add your mailboxes:
+    
+    ```ini
+    [default]
+    4000 => 1234,Javier,javier@ejemplo.com
+    4001 => 1234,Belen,belen@ejemplo.com
+    ```
+  </Step>
+
+  <Step title="Reload voicemail">
+    From the Asterisk CLI:
+    
+    ```
+    CLI> voicemail reload
+    ```
+    
+    Verify the configuration:
+    ```
+    CLI> voicemail show users
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The mailbox number doesn't have to match the extension number, but using the same number makes it easier for users to remember.
+</Note>
+
+### extensions.conf
+
+Configure the dialplan to enable voicemail functionality.
+
+<Accordion title="Example configuration">
+  ```ini
+  [empleado]
+  exten => 4000,1,NoOp(Llamando a Javier)
+  same => n,Dial(SIP/javier,15)
+  same => n,VoiceMail(${EXTEN})
+  same => n,Hangup()
+
+  exten => 4001,1,NoOp(Llamando a Belen)
+  same => n,Dial(SIP/belen,15)
+  same => n,VoiceMail(${EXTEN})
+  same => n,Hangup()
+
+  exten => *4000,1,VoiceMailMain(4000)
+  same => n,Hangup()
+
+  exten => *4001,1,VoiceMailMain(4001)
+  same => n,Hangup()
+  ```
+</Accordion>
+
+## How It Works
+
+<Steps>
+  <Step title="Call timeout">
+    When someone calls extension 4000, Asterisk rings for 15 seconds (specified in the `Dial` command).
+  </Step>
+
+  <Step title="Voicemail greeting">
+    If unanswered, the call proceeds to `VoiceMail(${EXTEN})`, which plays a greeting in Spanish.
+  </Step>
+
+  <Step title="Record message">
+    The caller can leave a voice message after the beep.
+  </Step>
+
+  <Step title="Message storage">
+    Messages are saved in three formats (wav49, gsm, wav) at:
+    
+    ```bash
+    /var/spool/asterisk/voicemail/default/4001/INBOX
+    ```
+  </Step>
+</Steps>
+
+## Accessing Voicemail
+
+Users can check their voicemail by dialing `*` + their extension number.
+
+<CodeGroup>
+  ```bash Extension 4000
+  # User dials *4000
+  # System prompts for PIN: 1234
+  # User hears their messages
+  ```
+
+  ```bash Extension 4001
+  # User dials *4001
+  # System prompts for PIN: 1234
+  # User hears their messages
+  ```
+</CodeGroup>
+
+## Console Output Example
+
+When a voicemail is left, you'll see output like this in the Asterisk console:
+
+```
+== Setting global variable 'SIPDOMAIN' to '192.168.1.180'
+  -- Executing [4001@empleado:1] NoOp("SIP/javier-00000001", "Llamando a Belen") in new stack
+  -- Executing [4001@empleado:2] Dial("SIP/javier-00000001", "SIP/belen,15") in new stack
+  -- Called SIP/belen
+  -- Nobody picked up in 15000 ms
+  -- Executing [4001@empleado:3] VoiceMail("SIP/javier-00000001", "4001") in new stack
+  -- <SIP/javier-00000001> Playing 'vm-intro.gsm' (language 'es')
+  -- <SIP/javier-00000001> Playing 'beep.gsm' (language 'es')
+  -- Recording the message
+  -- x=0, open writing:  /var/spool/asterisk/voicemail/default/4001/tmp/msg0000 format: wav49
+  -- x=1, open writing:  /var/spool/asterisk/voicemail/default/4001/tmp/msg0000 format: gsm
+  -- x=2, open writing:  /var/spool/asterisk/voicemail/default/4001/tmp/msg0000 format: wav
+  -- User ended message by pressing #
+  -- <SIP/javier-00000001> Playing 'vm-msgsaved.gsm' (language 'es')
+```
+
+## Verification
+
+Check that messages are stored:
+
+```bash
+$ ls -l /var/spool/asterisk/voicemail/default/4001/INBOX
+total 60
+-rw-r--r-- 1 asterisk asterisk 15644 Nov 14 10:23 msg0000.gsm
+-rw-r--r-- 1 asterisk asterisk 31288 Nov 14 10:23 msg0000.wav
+-rw-r--r-- 1 asterisk asterisk  7844 Nov 14 10:23 msg0000.wav49
+```
+
+<Note>
+  Messages are automatically saved in multiple codecs for compatibility with different playback systems.
+</Note>
+
+## Additional Configuration
+
+### General Settings
+
+In the `[general]` section of `voicemail.conf`, you can configure:
+
+```ini
+[general]
+format=wav49|gsm|wav
+serveremail=asterisk
+attach=yes
+skipms=3000
+maxsilence=10
+silencethreshold=128
+maxlogins=3
+```
+
+- **format**: Audio formats to save messages
+- **serveremail**: Email address for sending notifications
+- **attach**: Attach audio file to email notifications
+- **skipms**: Milliseconds to skip forward/backward
+- **maxsilence**: Maximum silence before ending message
+- **maxlogins**: Maximum failed login attempts
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Voicemail not working">
+    1. Check that the context name in `voicemail.conf` matches `extensions.conf`
+    2. Verify directory permissions:
+    ```bash
+    $ sudo chown -R asterisk:asterisk /var/spool/asterisk/voicemail
+    ```
+    3. Reload voicemail: `CLI> voicemail reload`
+  </Accordion>
+
+  <Accordion title="Can't access mailbox">
+    - Verify the PIN is correct in `voicemail.conf`
+    - Check that the extension for checking voicemail (e.g., `*4000`) is defined
+    - Ensure the user is in the correct context
+  </Accordion>
+
+  <Accordion title="No Spanish prompts">
+    Make sure Spanish language files are installed in:
+    ```bash
+    /var/lib/asterisk/sounds/es/
+    ```
+    And that `language=es` is set in `sip.conf`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+- Learn about [Call Transfer](/features/call-transfer) functionality
+- Configure [SIP Messaging](/features/sip-messaging) for text messages
+- Set up [Call Groups](/features/call-groups) for team calling

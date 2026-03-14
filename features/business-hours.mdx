@@ -1,0 +1,235 @@
+---
+title: Business Hours Routing
+description: Route calls based on time of day and day of week using GotoIfTime
+---
+
+Implement business hours routing to handle calls differently during and outside of working hours. This is essential for professional call handling.
+
+<Warning>
+This implementation should be done after [integrating Asterisk with MariaDB](/database/mariadb-installation).
+</Warning>
+
+## Overview
+
+Most businesses don't operate 24/7. Business hours routing allows you to:
+- Accept calls during working hours
+- Play informational messages outside business hours
+- Redirect to voicemail or emergency services
+- Provide different service levels based on time
+
+## The GotoIfTime Application
+
+The `GotoIfTime()` application evaluates time conditions and branches accordingly.
+
+**Syntax:**
+```
+GotoIfTime(<time_range>,<days_of_week>,<days_of_month>,<months>?[context,]extension,priority[:label])
+```
+
+**Parameters:**
+- `time_range`: Hour range (e.g., `8:00-20:00`)
+- `days_of_week`: Days (e.g., `mon-fri`, `mon,wed,fri`)
+- `days_of_month`: Day numbers (e.g., `1-15`, `*` for all)
+- `months`: Months (e.g., `jan-jun`, `*` for all)
+- `?`: Followed by destination if condition matches
+
+## Basic Business Hours Example
+
+Monday-Friday, 8:00 AM to 8:00 PM:
+
+```conf
+[entrantes]
+exten => _995554XXX,1,Set(extension=${EXTEN:5})
+same => n,NoOp(Llamando a la extension ${extension})
+same => n,GotoIfTime(8:00-20:00,mon-fri,*,*?empleado,${extension},1)
+same => n,Festival(En estos momentos no hay nadie que te pueda atender)
+same => n,Festival(Nuestro horario es de 8 a 20 horas de lunes a viernes)
+same => n,Hangup()
+```
+
+**How it works:**
+1. Extract extension from dialed number
+2. Check if current time matches business hours
+3. If **yes** → Route to employee extension
+4. If **no** → Play closed message and hang up
+
+## Time Range Examples
+
+### Standard Business Hours
+
+```conf
+; Monday-Friday, 9-5
+GotoIfTime(9:00-17:00,mon-fri,*,*?open,s,1)
+```
+
+### Extended Hours
+
+```conf
+; Monday-Friday 8-8, Saturday 9-2
+exten => s,1,GotoIfTime(8:00-20:00,mon-fri,*,*?open,s,1)
+same => n,GotoIfTime(9:00-14:00,sat,*,*?open,s,1)
+same => n,Goto(closed,s,1)
+```
+
+### Holiday Schedule
+
+```conf
+; Closed on December 25
+exten => s,1,GotoIfTime(*,*,25,dec?closed,s,1)
+same => n,GotoIfTime(9:00-17:00,mon-fri,*,*?open,s,1)
+same => n,Goto(closed,s,1)
+```
+
+### Lunch Break
+
+```conf
+; Closed for lunch 12-1 PM
+exten => s,1,GotoIfTime(12:00-13:00,mon-fri,*,*?lunch,s,1)
+same => n,GotoIfTime(9:00-17:00,mon-fri,*,*?open,s,1)
+same => n,Goto(closed,s,1)
+```
+
+## Complete Example with Contexts
+
+<CodeGroup>
+```conf Basic Hours
+[entrantes]
+; External calls with business hours
+exten => _995554XXX,1,Set(extension=${EXTEN:5})
+same => n,NoOp(Llamando a la extension ${extension})
+same => n,GotoIfTime(8:00-20:00,mon-fri,*,*?empleado,${extension},1)
+same => n,Festival(En estos momentos no hay nadie que te pueda atender)
+same => n,Festival(Nuestro horario es de 8 a 20 horas de lunes a viernes)
+same => n,Hangup()
+
+[empleado]
+exten => 4000,1,NoOp(Llamando a Javier)
+same => n,Dial(SIP/javier,15)
+same => n,VoiceMail(${EXTEN})
+same => n,Hangup()
+
+exten => 4001,1,NoOp(Llamando a Belen)
+same => n,Dial(SIP/belen,15)
+same => n,VoiceMail(${EXTEN})
+same => n,Hangup()
+```
+
+```conf Advanced Hours
+[entrantes]
+; Multi-schedule routing
+exten => _995554XXX,1,Set(extension=${EXTEN:5})
+same => n,NoOp(External call to ${extension})
+
+; Check holidays first
+same => n,GotoIfTime(*,*,25,dec?holiday,s,1)
+same => n,GotoIfTime(*,*,1,jan?holiday,s,1)
+
+; Check business hours
+same => n,GotoIfTime(8:00-20:00,mon-fri,*,*?empleado,${extension},1)
+same => n,GotoIfTime(9:00-14:00,sat,*,*?empleado,${extension},1)
+
+; Outside hours - go to voicemail
+same => n,Goto(afterhours,s,1)
+
+[afterhours]
+exten => s,1,Answer()
+same => n,Playback(closed-message)
+same => n,Hangup()
+
+[holiday]
+exten => s,1,Answer()
+same => n,Playback(holiday-message)
+same => n,Hangup()
+```
+</CodeGroup>
+
+## Time Format Reference
+
+### Hour Ranges
+- `8:00-17:00` - 8 AM to 5 PM
+- `9:30-18:30` - 9:30 AM to 6:30 PM
+- `*` - All hours
+
+### Days of Week
+- `mon` - Monday
+- `tue` - Tuesday
+- `wed` - Wednesday
+- `thu` - Thursday
+- `fri` - Friday
+- `sat` - Saturday
+- `sun` - Sunday
+- `mon-fri` - Monday through Friday
+- `mon,wed,fri` - Specific days
+- `*` - All days
+
+### Days of Month
+- `1-31` - Specific day range
+- `1,15` - 1st and 15th
+- `*` - All days
+
+### Months
+- `jan`, `feb`, `mar`, etc.
+- `jan-jun` - January through June
+- `*` - All months
+
+## Testing Business Hours
+
+<Steps>
+  <Step title="Test during business hours">
+    Make a call between 8:00-20:00 Monday-Friday.
+    
+    Expected: Call routes to employee extension.
+  </Step>
+
+  <Step title="Test outside business hours">
+    Make a call before 8:00 AM, after 8:00 PM, or on weekends.
+    
+    Expected: Closed message plays.
+  </Step>
+
+  <Step title="Temporarily override for testing">
+    To test outside-hours behavior during business hours, modify the time range:
+    
+    ```conf
+    ; Will always fail during business hours
+    GotoIfTime(20:00-22:00,mon-fri,*,*?empleado,${extension},1)
+    ```
+  </Step>
+</Steps>
+
+## Advanced: Emergency Override
+
+Allow certain extensions to bypass business hours:
+
+```conf
+[entrantes]
+exten => _995554XXX,1,Set(extension=${EXTEN:5})
+same => n,NoOp(External call to ${extension})
+
+; Emergency/Support line - always available
+same => n,GotoIf($["${extension}" = "4911"]?empleado,${extension},1)
+
+; Regular hours check
+same => n,GotoIfTime(8:00-20:00,mon-fri,*,*?empleado,${extension},1)
+same => n,Goto(afterhours,s,1)
+```
+
+<Info>
+Combine business hours with [call queues](/features/call-queues) to route after-hours calls to an emergency queue or voicemail.
+</Info>
+
+## Reload Configuration
+
+```
+CLI> dialplan reload
+```
+
+## Troubleshooting
+
+**Calls not routing correctly:**
+- Verify server timezone: `date`
+- Check Asterisk time: `core show settings`
+- Enable verbose logging to see GotoIfTime evaluation
+
+**Time zone issues:**
+Set timezone in `/etc/timezone` and reboot.

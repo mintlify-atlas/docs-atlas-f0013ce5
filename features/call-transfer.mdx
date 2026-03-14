@@ -1,0 +1,250 @@
+---
+title: 'Call Transfer (Transferencia de Llamadas)'
+description: 'Enable call transfer functionality and play custom music or audio during calls'
+icon: 'arrow-right-arrow-left'
+---
+
+This guide explains how to enable call transfer functionality in Asterisk and configure custom audio playback using the `Playback()` application.
+
+## Overview
+
+Call transfer allows users to redirect active calls to other extensions. The ability to transfer calls depends on the SIP phone/softphone being used, but Asterisk provides the infrastructure to support this feature.
+
+<Note>
+  The transfer functionality primarily relies on the SIP client's capabilities. This guide focuses on configuring Asterisk to support transfers and play custom audio.
+</Note>
+
+## Adding Custom Music
+
+Before configuring transfers, you may want to add custom audio files for use with the `Playback()` application.
+
+<Steps>
+  <Step title="Convert audio to sln16 format">
+    Use the `sox` tool to convert MP3 files to Asterisk's native format:
+    
+    ```bash
+    $ sox file.mp3 --type raw --encoding signed-integer --bits 16 \
+      --channels 1 --rate 16k file.sln16
+    ```
+  </Step>
+
+  <Step title="Install sox if needed">
+    ```bash
+    $ sudo apt-get install sox
+    ```
+  </Step>
+
+  <Step title="Upload audio files">
+    Move your converted audio files to Asterisk's sounds directory:
+    
+    ```bash
+    /var/lib/asterisk/sounds/es/[carpeta]/
+    ```
+    
+    For example:
+    ```bash
+    /var/lib/asterisk/sounds/es/mimusica/primavera.sln16
+    ```
+  </Step>
+
+  <Step title="Convert to multiple formats">
+    Use the conversion script from section 3.5 to generate multiple codec versions (gsm, alaw, ulaw):
+    
+    ```bash
+    $ cd /var/lib/asterisk/sounds/es/mimusica/
+    $ sudo ./convertir
+    ```
+  </Step>
+
+  <Step title="Set permissions">
+    Ensure Asterisk can read the files:
+    
+    ```bash
+    $ sudo chown -R asterisk:asterisk /var/lib/asterisk/sounds/es/mimusica/
+    ```
+  </Step>
+</Steps>
+
+## Configuration
+
+### extensions.conf
+
+Add an extension that plays custom audio using the `Playback()` application.
+
+<Accordion title="Example configuration">
+  ```ini
+  [empleado]
+  exten => 100,1,NoOp(Centralita de distribucion de llamadas)
+  same => n,Playback(silence/1)
+  same => n,Playback(mimusica/primavera)
+  same => n,Hangup()
+  ```
+</Accordion>
+
+### Understanding Playback()
+
+The `Playback()` application plays audio files from the Asterisk sounds directory.
+
+<CodeGroup>
+  ```ini Syntax
+  Playback(filename[,options])
+  ```
+
+  ```ini Examples
+  ; Play 1 second of silence
+  Playback(silence/1)
+  
+  ; Play custom music
+  Playback(mimusica/primavera)
+  
+  ; Play with skip option
+  Playback(transfer,skip)
+  ```
+</CodeGroup>
+
+<Note>
+  File paths are relative to `/var/lib/asterisk/sounds/es/`. Do not include file extensions - Asterisk automatically selects the best codec.
+</Note>
+
+## Reload Configuration
+
+After editing `extensions.conf`, reload the dialplan:
+
+```
+CLI> dialplan reload
+```
+
+## Performing Call Transfers
+
+The exact method for transferring calls depends on your SIP client:
+
+<Accordion title="Generic SIP Phone">
+  1. During an active call, press the **Transfer** button
+  2. Dial the extension number to transfer to (e.g., 100)
+  3. Press **Transfer** again to complete
+</Accordion>
+
+<Accordion title="Blink Softphone">
+  1. During an active call, call the extension you want to transfer to
+  2. Hold **Alt** key and drag the first session onto the second session
+  3. The call will be transferred
+</Accordion>
+
+## Example Scenario
+
+<Steps>
+  <Step title="Initial call">
+    User Belen calls Javier (extension 4000). Javier answers.
+  </Step>
+
+  <Step title="Transfer initiated">
+    Javier presses the **Transfer** button on his softphone.
+  </Step>
+
+  <Step title="Enter destination">
+    Javier dials 100 (the music extension).
+  </Step>
+
+  <Step title="Transfer completed">
+    Belen is now connected to extension 100 and hears the custom music playing.
+  </Step>
+</Steps>
+
+## Console Output
+
+When a call is transferred, you'll see output similar to:
+
+```
+== Setting global variable 'SIPDOMAIN' to '192.168.1.180'
+  -- Executing [100@empleado:1] NoOp("SIP/belen-00000002", "Centralita de distribucion de llamadas") in new stack
+  -- Executing [100@empleado:2] Playback("SIP/belen-00000002", "silence/1") in new stack
+  -- <SIP/belen-00000002> Playing 'silence/1.slin' (language 'es')
+  -- Executing [100@empleado:3] Playback("SIP/belen-00000002", "mimusica/primavera") in new stack
+  -- <SIP/belen-00000002> Playing 'mimusica/primavera.slin' (language 'es')
+```
+
+## Advanced Audio Configuration
+
+### Audio File Organization
+
+Organize audio files in subdirectories for better management:
+
+```bash
+/var/lib/asterisk/sounds/es/
+├── mimusica/
+│   ├── primavera.gsm
+│   ├── primavera.alaw
+│   ├── primavera.ulaw
+│   └── primavera.sln16
+├── custom/
+│   └── greeting.gsm
+└── silence/
+    └── 1.gsm
+```
+
+### Creating Custom Greetings
+
+You can record custom greetings for your organization:
+
+<CodeGroup>
+  ```ini Record greeting
+  exten => 999,1,Answer()
+  same => n,Wait(1)
+  same => n,Record(custom/greeting.gsm)
+  same => n,Wait(2)
+  same => n,Playback(custom/greeting)
+  same => n,Hangup()
+  ```
+
+  ```ini Use greeting
+  exten => 100,1,Answer()
+  same => n,Playback(custom/greeting)
+  same => n,Hangup()
+  ```
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Audio file not found">
+    Check that:
+    - The file exists in `/var/lib/asterisk/sounds/es/`
+    - File has correct permissions (readable by asterisk user)
+    - Path in `Playback()` doesn't include file extension
+    - File is in a supported codec format
+  </Accordion>
+
+  <Accordion title="Transfer not working">
+    1. Verify your SIP client supports transfers
+    2. Check that the destination extension exists in the dialplan
+    3. Ensure the user has permission to dial the destination context
+    4. Review Asterisk console for error messages
+  </Accordion>
+
+  <Accordion title="Poor audio quality">
+    - Convert audio files to multiple codecs for best compatibility
+    - Use appropriate sample rates (8kHz for telephony)
+    - Check network bandwidth and jitter
+  </Accordion>
+</AccordionGroup>
+
+## SIP Configuration Notes
+
+While transfer functionality is client-dependent, ensure your `sip.conf` settings support it:
+
+```ini
+[general]
+directmedia=no        ; Forces media through Asterisk
+canreinvite=no        ; Prevents re-INVITE issues
+
+[javier]
+type=friend
+context=empleado
+canreinvite=no        ; Required for proper transfer handling
+```
+
+## Next Steps
+
+- Configure [SIP Messaging](/features/sip-messaging) for text communication
+- Set up [Call Groups](/features/call-groups) for simultaneous ringing
+- Learn about [Call Pickup](/features/call-pickup) to answer calls intended for colleagues

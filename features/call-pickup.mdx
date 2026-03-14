@@ -1,0 +1,491 @@
+---
+title: 'Call Pickup (Captura de Llamadas)'
+description: 'Allow users to answer calls ringing on other extensions using call pickup groups'
+icon: 'phone-arrow-down-left'
+---
+
+Call pickup allows a user to answer a call that is ringing on another extension. This is useful in office environments where someone can answer a colleague's phone when they're away from their desk.
+
+## Overview
+
+Call pickup enables:
+- Answering calls intended for colleagues
+- Group-based pickup permissions
+- Pickup across departments
+- Using `*8` prefix to capture calls
+
+## How It Works
+
+When extension 4001 (Belen) is ringing, extension 4000 (Javier) can:
+1. Dial `*84001`
+2. The call is transferred to Javier
+3. Belen's phone stops ringing
+
+<Note>
+  The pickup code `*8` is configured in `features.conf` and can be customized.
+</Note>
+
+## Configuration
+
+### features.conf
+
+The pickup feature is pre-configured in Asterisk. To verify or customize:
+
+```bash
+$ sudo vim /etc/asterisk/features.conf
+```
+
+<Accordion title="Default pickup configuration">
+  ```ini
+  [featuremap]
+  blindxfer => #1
+  disconnect => *0
+  automon => *1
+  atxfer => *2
+  parkcall => #72
+  pickup => *8
+  ```
+</Accordion>
+
+You can verify from the Asterisk CLI:
+
+```
+CLI> features show
+```
+
+Output:
+```
+Pickup Extension: *8
+```
+
+### sip.conf
+
+Define call groups and pickup groups for each SIP peer.
+
+<Steps>
+  <Step title="Understand callgroup and pickupgroup">
+    - **callgroup**: The group(s) this device belongs to
+    - **pickupgroup**: The group(s) this device can pickup from
+  </Step>
+
+  <Step title="Configure employee peers">
+    Configure Javier and Belen to pickup each other's calls:
+    
+    ```ini
+    [javier]
+    type=friend
+    secret=310195
+    context=empleado
+    host=dynamic
+    canreinvite=no
+    nat=force_rport,comedia
+    callgroup=2
+    pickupgroup=2
+
+    [belen]
+    type=friend
+    secret=120995
+    context=empleado
+    host=dynamic
+    canreinvite=no
+    nat=force_rport,comedia
+    callgroup=2
+    pickupgroup=2
+    ```
+  </Step>
+
+  <Step title="Configure director with broader access">
+    Director can pickup from group 2 (employees) but employees cannot pickup director's calls:
+    
+    ```ini
+    [director]
+    type=friend
+    secret=130261
+    context=direccion
+    host=dynamic
+    canreinvite=no
+    nat=force_rport,comedia
+    callgroup=1
+    pickupgroup=1,2
+    ```
+  </Step>
+
+  <Step title="Reload SIP configuration">
+    ```
+    CLI> sip reload
+    ```
+  </Step>
+</Steps>
+
+### Call Group Matrix
+
+| User | callgroup | pickupgroup | Can pickup from |
+|------|-----------|-------------|----------------|
+| javier | 2 | 2 | belen only |
+| belen | 2 | 2 | javier only |
+| director | 1 | 1,2 | other directors, javier, belen |
+
+### extensions.conf
+
+Add pickup functionality to your dialplan contexts.
+
+<Steps>
+  <Step title="Add pickup to empleado context">
+    ```ini
+    [empleado]
+    ;####-Extensiones habilitadas-####
+    exten => 4000,1,NoOp(Llamando a Javier)
+    same => n,Dial(SIP/javier,15)
+    same => n,VoiceMail(${EXTEN})
+    same => n,Hangup()
+
+    exten => 4001,1,NoOp(Llamando a Belen)
+    same => n,Dial(SIP/belen,15)
+    same => n,VoiceMail(${EXTEN})
+    same => n,Hangup()
+
+    ;####-Captura de llamadas-####
+    exten => _*8.,1,NoOp(Capturando llamada a la extension ${EXTEN:2})
+    same => n,Pickup(${EXTEN:2})
+    same => n,Hangup()
+    ```
+  </Step>
+
+  <Step title="Add director context with pickup">
+    ```ini
+    [direccion]
+    ;####-Extensiones habilitadas-####
+    exten => 4000,1,NoOp(Llamando a Javier)
+    same => n,Dial(SIP/javier,15)
+    same => n,VoiceMail(${EXTEN})
+    same => n,Hangup()
+
+    exten => 4001,1,NoOp(Llamando a Belen)
+    same => n,Dial(SIP/belen,15)
+    same => n,VoiceMail(${EXTEN})
+    same => n,Hangup()
+
+    ;####-Captura de llamadas-####
+    exten => _*8.,1,NoOp(Capturando llamada a la extension ${EXTEN:2})
+    same => n,Pickup(${EXTEN:2}@empleado)
+    same => n,Hangup()
+    ```
+    
+    Note: Director specifies `@empleado` context for cross-context pickup.
+  </Step>
+
+  <Step title="Reload dialplan">
+    ```
+    CLI> dialplan reload
+    ```
+  </Step>
+</Steps>
+
+## Understanding the Dialplan
+
+### Pattern Matching
+
+```ini
+exten => _*8.,1,NoOp(Capturando llamada a la extension ${EXTEN:2})
+```
+
+- `_*8.` matches: `*8` followed by one or more digits
+- Examples: `*84001`, `*84000`, `*85000`
+
+### Extension Parsing
+
+```ini
+same => n,Pickup(${EXTEN:2})
+```
+
+- `${EXTEN}` contains the full dialed number (e.g., `*84001`)
+- `${EXTEN:2}` strips first 2 characters, leaving `4001`
+- This is passed to `Pickup()` function
+
+### Pickup() Function
+
+<CodeGroup>
+  ```ini Same context
+  Pickup(${EXTEN:2})
+  ```
+
+  ```ini Specific extension
+  Pickup(4001)
+  ```
+
+  ```ini Different context
+  Pickup(${EXTEN:2}@empleado)
+  ```
+
+  ```ini Multiple extensions
+  Pickup(4001&4002&4003)
+  ```
+</CodeGroup>
+
+## Testing
+
+<Steps>
+  <Step title="Scenario: Javier picks up Belen's call">
+    1. Someone calls extension 4001 (Belen)
+    2. Belen's phone starts ringing
+    3. Javier dials `*84001` from his phone
+    4. Javier is connected to the caller
+    5. Belen's phone stops ringing
+  </Step>
+
+  <Step title="Verify in console">
+    Watch the Asterisk console during pickup:
+    
+    ```
+    -- Executing [*84001@empleado:1] NoOp("SIP/javier-00000004", "Capturando llamada a la extension 4001") in new stack
+    -- Executing [*84001@empleado:2] Pickup("SIP/javier-00000004", "4001") in new stack
+    -- SIP/javier-00000004 answered SIP/oscar-00000003
+    ```
+  </Step>
+</Steps>
+
+## Console Output Examples
+
+<Accordion title="Successful pickup">
+  ```
+  == Setting global variable 'SIPDOMAIN' to '192.168.1.180'
+    -- Executing [4001@empleado:1] NoOp("SIP/oscar-00000005", "Llamando a Belen") in new stack
+    -- Executing [4001@empleado:2] Dial("SIP/oscar-00000005", "SIP/belen,15") in new stack
+    -- Called SIP/belen
+    -- SIP/belen-00000006 is ringing
+    -- Executing [*84001@empleado:1] NoOp("SIP/javier-00000007", "Capturando llamada a la extension 4001") in new stack
+    -- Executing [*84001@empleado:2] Pickup("SIP/javier-00000007", "4001") in new stack
+    -- SIP/javier-00000007 picked up SIP/belen-00000006
+    -- SIP/javier-00000007 answered SIP/oscar-00000005
+  ```
+</Accordion>
+
+<Accordion title="Failed pickup (wrong group)">
+  When Javier tries to pickup director's call (not permitted):
+  
+  ```
+  == Setting global variable 'SIPDOMAIN' to '192.168.1.180'
+    -- Executing [5000@empleado:1] NoOp("SIP/oscar-00000008", "Llamando al director") in new stack
+    -- Executing [5000@empleado:2] Dial("SIP/oscar-00000008", "SIP/director,15") in new stack
+    -- Called SIP/director
+    -- SIP/director-00000009 is ringing
+    -- Executing [*85000@empleado:1] NoOp("SIP/javier-0000000a", "Capturando llamada a la extension 5000") in new stack
+    -- Executing [*85000@empleado:2] Pickup("SIP/javier-0000000a", "5000") in new stack
+  [Nov 14 11:45:23] WARNING[12345]: app_directed_pickup.c:234 pickup_exec: No target channel found for 5000
+    -- Executing [*85000@empleado:3] Hangup("SIP/javier-0000000a", "") in new stack
+  ```
+</Accordion>
+
+## Advanced Scenarios
+
+### Department-Wide Pickup
+
+Allow any member of a department to pickup any call:
+
+```ini
+[general]
+;-----Sales Department-----
+[alice]
+callgroup=10
+pickupgroup=10
+
+[bob]
+callgroup=10
+pickupgroup=10
+
+[charlie]
+callgroup=10
+pickupgroup=10
+
+;-----Support Department-----
+[dave]
+callgroup=20
+pickupgroup=20
+
+[eve]
+callgroup=20
+pickupgroup=20
+```
+
+### Cross-Department Pickup
+
+Allow managers to pickup from multiple departments:
+
+```ini
+[sales_manager]
+callgroup=10
+pickupgroup=10,20,30  ; Can pickup from sales, support, and billing
+```
+
+### Pickup Any Ringing Call
+
+Create a "pickup any" extension:
+
+```ini
+exten => **8,1,NoOp(Pickup any ringing call)
+same => n,PickupChan(SIP/javier&SIP/belen&SIP/carlos)
+same => n,Hangup()
+```
+
+## Complete Configuration Example
+
+<Accordion title="Full sip.conf example">
+  ```ini
+  [general]
+  port=5060
+  directmedia=no
+  language=es
+  context=public
+
+  [javier]
+  type=friend
+  secret=310195
+  context=empleado
+  host=dynamic
+  canreinvite=no
+  nat=force_rport,comedia
+  callgroup=2
+  pickupgroup=2
+
+  [belen]
+  type=friend
+  secret=120995
+  context=empleado
+  host=dynamic
+  canreinvite=no
+  nat=force_rport,comedia
+  callgroup=2
+  pickupgroup=2
+
+  [director]
+  type=friend
+  secret=130261
+  context=direccion
+  host=dynamic
+  canreinvite=no
+  nat=force_rport,comedia
+  callgroup=1
+  pickupgroup=1,2
+
+  [oscar]
+  type=friend
+  secret=201097
+  context=entrantes
+  host=dynamic
+  canreinvite=no
+  nat=force_rport,comedia
+  ```
+</Accordion>
+
+<Accordion title="Full extensions.conf example">
+  ```ini
+  [empleado]
+  ;####-Extensiones habilitadas-####
+  exten => 4000,1,NoOp(Llamando a Javier)
+  same => n,Dial(SIP/javier,15)
+  same => n,VoiceMail(${EXTEN})
+  same => n,Hangup()
+
+  exten => 4001,1,NoOp(Llamando a Belen)
+  same => n,Dial(SIP/belen,15)
+  same => n,VoiceMail(${EXTEN})
+  same => n,Hangup()
+
+  exten => 5000,1,NoOp(Llamando al director)
+  same => n,Dial(SIP/director,15)
+  same => n,Hangup()
+
+  ;####-Buzones de voz-####
+  exten => *4000,1,VoiceMailMain(4000)
+  same => n,Hangup()
+
+  exten => *4001,1,VoiceMailMain(4001)
+  same => n,Hangup()
+
+  ;####-Captura de llamadas-####
+  exten => _*8.,1,NoOp(Capturando llamada a la extension ${EXTEN:2})
+  same => n,Pickup(${EXTEN:2})
+  same => n,Hangup()
+
+  [direccion]
+  ;####-Extensiones habilitadas-####
+  exten => 4000,1,NoOp(Llamando a Javier)
+  same => n,Dial(SIP/javier,15)
+  same => n,VoiceMail(${EXTEN})
+  same => n,Hangup()
+
+  exten => 4001,1,NoOp(Llamando a Belen)
+  same => n,Dial(SIP/belen,15)
+  same => n,VoiceMail(${EXTEN})
+  same => n,Hangup()
+
+  ;####-Captura de llamadas-####
+  exten => _*8.,1,NoOp(Capturando llamada a la extension ${EXTEN:2})
+  same => n,Pickup(${EXTEN:2}@empleado)
+  same => n,Hangup()
+  ```
+</Accordion>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cannot pickup any calls">
+    1. Verify `callgroup` and `pickupgroup` are configured in sip.conf
+    2. Check that pickup extensions exist in dialplan
+    3. Ensure users are in compatible groups
+    4. Reload: `CLI> sip reload` and `CLI> dialplan reload`
+  </Accordion>
+
+  <Accordion title="Can only pickup same context">
+    - Use `Pickup(${EXTEN:2}@contextname)` to specify target context
+    - Verify the target extension exists in that context
+    - Check permissions between contexts
+  </Accordion>
+
+  <Accordion title="Wrong pickup code">
+    - Check `features.conf` for configured pickup code
+    - Verify dialplan matches (e.g., `_*8.` vs `_**8.`)
+    - Some phones have built-in pickup codes that may conflict
+  </Accordion>
+
+  <Accordion title="Pickup works but no audio">
+    - Check NAT settings in sip.conf
+    - Verify `canreinvite=no` or `directmedia=no`
+    - Review network/firewall configuration
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+<Note>
+  - Use pickup groups to enforce departmental boundaries
+  - Don't give everyone `pickupgroup=1,2,3,4...` - be specific
+  - Consider privacy implications of call pickup
+  - Log pickup events for audit purposes
+  - Executive/sensitive extensions should be in isolated groups
+</Note>
+
+## Best Practices
+
+1. **Logical Group Numbers**
+   - Use meaningful group numbers (10=sales, 20=support, 30=management)
+   - Document your group numbering scheme
+
+2. **Hierarchical Access**
+   - Managers can pickup from subordinates
+   - Subordinates cannot pickup manager calls
+
+3. **Training**
+   - Teach users the pickup code (`*8` + extension)
+   - Explain which calls they can pickup
+
+4. **Testing**
+   - Test pickup between all expected combinations
+   - Verify denied scenarios also work correctly
+
+## Next Steps
+
+- Configure [Call Groups](/features/call-groups) for simultaneous ringing
+- Set up [Voicemail](/features/voicemail) for missed calls
+- Learn about [Call Transfer](/features/call-transfer) functionality
+- Implement [Call Queues](/features/call-queues) for larger teams

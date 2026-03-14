@@ -1,0 +1,432 @@
+---
+title: "extensions.conf Configuration"
+description: "Complete reference for Asterisk dialplan configuration and call routing"
+---
+
+## Overview
+
+The `extensions.conf` file contains the Asterisk dialplan, which defines how calls are processed and routed. This is the core configuration file that controls call flow logic, including answering, routing, transferring, and all call handling features.
+
+## File Location
+
+```
+/etc/asterisk/extensions.conf
+```
+
+## File Structure
+
+The dialplan consists of:
+- **[general]** - Global dialplan settings
+- **[globals]** - Global variables
+- **[contexts]** - Call routing contexts (one per section)
+
+## General Section
+
+<CodeGroup>
+```ini Basic Configuration
+[general]
+static=yes
+writeprotect=no
+clearglobalvars=no
+```
+</CodeGroup>
+
+### General Parameters
+
+<ParamField path="static" type="boolean" default="yes">
+  Whether the dialplan is static or can be modified at runtime
+</ParamField>
+
+<ParamField path="writeprotect" type="boolean" default="no">
+  Protect the dialplan from being overwritten by the CLI save command
+</ParamField>
+
+<ParamField path="clearglobalvars" type="boolean" default="no">
+  Clear global variables on dialplan reload
+</ParamField>
+
+## Global Variables
+
+Define global variables accessible throughout the dialplan.
+
+```ini
+[globals]
+CONSOLE=Console/dsp
+IAXINFO=guest
+TRUNK=DAHDI/G2
+TRUNKMSD=1
+```
+
+<ParamField path="CONSOLE" type="string">
+  Console interface for demo and testing
+</ParamField>
+
+<ParamField path="TRUNK" type="string">
+  Default trunk interface for outbound calls
+</ParamField>
+
+<ParamField path="TRUNKMSD" type="integer">
+  Most Significant Digits to strip from outbound calls
+</ParamField>
+
+## Contexts
+
+Contexts are the fundamental organizational unit of the dialplan. Each context contains extensions that define call handling logic.
+
+<CodeGroup>
+```ini Simple Context
+[empleado]
+exten => 4000,1,Dial(SIP/javier)
+exten => 4001,1,Dial(SIP/belen)
+```
+
+```ini Context with Voicemail
+[empleado]
+exten => 4000,1,NoOp(Llamando a Javier)
+ same => n,Dial(SIP/javier,15)
+ same => n,VoiceMail(${EXTEN})
+ same => n,Hangup()
+
+exten => 4001,1,NoOp(Llamando a Belen)
+ same => n,Dial(SIP/belen,15)
+ same => n,VoiceMail(${EXTEN})
+ same => n,Hangup()
+```
+
+```ini Voicemail Access
+[empleado]
+exten => *4000,1,VoiceMailMain(4000)
+ same => n,Hangup()
+
+exten => *4001,1,VoiceMailMain(4001)
+ same => n,Hangup()
+```
+</CodeGroup>
+
+## Extension Syntax
+
+Extensions define the call handling logic for specific dialed numbers.
+
+### Basic Syntax
+
+```
+exten => extension,priority,application(arguments)
+```
+
+- **extension** - The dialed number or pattern
+- **priority** - Execution order (1, 2, 3... or use `n` for next)
+- **application** - Asterisk application to execute
+- **arguments** - Application-specific parameters
+
+### Priority Syntax
+
+<CodeGroup>
+```ini Numbered Priorities
+exten => 4000,1,NoOp(Starting call)
+exten => 4000,2,Dial(SIP/javier,15)
+exten => 4000,3,VoiceMail(4000)
+exten => 4000,4,Hangup()
+```
+
+```ini Using 'same' and 'n'
+exten => 4000,1,NoOp(Starting call)
+ same => n,Dial(SIP/javier,15)
+ same => n,VoiceMail(4000)
+ same => n,Hangup()
+```
+</CodeGroup>
+
+<Accordion title="Priority Best Practices">
+  Use `same => n` syntax instead of numbered priorities for easier maintenance. The `n` automatically increments the priority, and `same` uses the same extension as the previous line.
+</Accordion>
+
+## Pattern Matching
+
+Extensions can use patterns to match multiple numbers.
+
+<CodeGroup>
+```ini Basic Patterns
+; Match any single digit
+exten => _X,1,NoOp(Single digit: ${EXTEN})
+
+; Match any 4-digit extension starting with 4
+exten => _4XXX,1,Dial(SIP/${EXTEN})
+
+; Match any number starting with 9011
+exten => _9011.,1,NoOp(International call)
+```
+
+```ini Advanced Patterns
+; Match toll-free numbers
+exten => _91800NXXXXXX,1,Dial(${TRUNK}/${EXTEN:1})
+exten => _91888NXXXXXX,1,Dial(${TRUNK}/${EXTEN:1})
+exten => _91877NXXXXXX,1,Dial(${TRUNK}/${EXTEN:1})
+
+; Match local 7-digit numbers
+exten => _9NXXXXXX,1,Dial(${TRUNK}/${EXTEN:1})
+```
+
+```ini Pattern with Capture
+; Capture extension and use in dialplan
+exten => _*8.,1,NoOp(Capturing call to ${EXTEN:2})
+ same => n,Pickup(${EXTEN:2})
+ same => n,Hangup()
+```
+</CodeGroup>
+
+### Pattern Matching Characters
+
+<ParamField path="X" type="pattern">
+  Matches any digit 0-9
+</ParamField>
+
+<ParamField path="Z" type="pattern">
+  Matches any digit 1-9
+</ParamField>
+
+<ParamField path="N" type="pattern">
+  Matches any digit 2-9
+</ParamField>
+
+<ParamField path="." type="pattern">
+  Wildcard - matches one or more characters
+</ParamField>
+
+<ParamField path="!" type="pattern">
+  Wildcard - matches zero or more characters
+</ParamField>
+
+<ParamField path="[12345]" type="pattern">
+  Matches any digit in the brackets
+</ParamField>
+
+## Common Dialplan Applications
+
+### Call Handling
+
+<CodeGroup>
+```ini Answer and Dial
+exten => 100,1,Answer()
+ same => n,Playback(welcome)
+ same => n,Dial(SIP/javier&SIP/belen,30)
+ same => n,Hangup()
+```
+
+```ini Ring Group
+exten => 4040,1,NoOp(Llamando al grupo 'empleados')
+ same => n,Dial(SIP/javier&SIP/belen,60)
+ same => n,Hangup()
+```
+
+```ini Call Pickup
+exten => _*8.,1,NoOp(Capturando llamada a la extension ${EXTEN:2})
+ same => n,Pickup(${EXTEN:2})
+ same => n,Hangup()
+```
+</CodeGroup>
+
+### Voicemail Integration
+
+<CodeGroup>
+```ini Voicemail on No Answer
+exten => 4000,1,NoOp(Llamando a Javier)
+ same => n,Dial(SIP/javier,15)
+ same => n,VoiceMail(${EXTEN})
+ same => n,Hangup()
+```
+
+```ini Voicemail Access
+exten => *4000,1,VoiceMailMain(4000)
+ same => n,Hangup()
+```
+</CodeGroup>
+
+### Variables and Functions
+
+<CodeGroup>
+```ini Set Variables
+exten => s,1,Set(TIMEOUT(digit)=5)
+ same => n,Set(TIMEOUT(response)=10)
+ same => n,Set(CALLERID(name)=Support)
+```
+
+```ini String Functions
+exten => _X.,1,Set(dest=${EXTEN})
+ same => n,Set(remitente=${CUT(MESSAGE(from),<,2)})
+ same => n,Set(remitente=${CUT(remitente,@,1)})
+ same => n,Set(remitente=${CUT(remitente,:,2)})
+```
+
+```ini Conditionals
+exten => _X.,1,GotoIf($["${EXTEN}" = "4000"]?4000)
+ same => n,GotoIf($["${EXTEN}" = "4001"]?4001)
+ same => n,Hangup()
+```
+</CodeGroup>
+
+## Context Inclusion
+
+Contexts can include other contexts to reuse dialplan logic.
+
+```ini
+[local]
+include => default
+include => parkedcalls
+
+[longdistance]
+include => local
+include => trunkld
+
+[international]
+include => longdistance
+include => trunkint
+```
+
+<Accordion title="Include Order">
+  Asterisk searches for matching extensions in the order contexts are included. The first match wins. Use this to create hierarchical permission levels.
+</Accordion>
+
+## Special Extensions
+
+<ParamField path="s" type="extension">
+  Start extension - executed when entering a context without a specific extension
+</ParamField>
+
+<ParamField path="t" type="extension">
+  Timeout extension - executed when user doesn't enter input within timeout period
+</ParamField>
+
+<ParamField path="i" type="extension">
+  Invalid extension - executed when user dials an invalid/undefined extension
+</ParamField>
+
+<ParamField path="h" type="extension">
+  Hangup extension - executed when the call is hung up
+</ParamField>
+
+<CodeGroup>
+```ini Special Extension Handling
+[demo]
+exten => s,1,Answer()
+ same => n,BackGround(demo-congrats)
+ same => n,WaitExten()
+
+exten => t,1,Playback(goodbye)
+ same => n,Hangup()
+
+exten => i,1,Playback(invalid)
+ same => n,Goto(s,1)
+```
+</CodeGroup>
+
+## Macros
+
+Macros are reusable dialplan subroutines (deprecated in favor of GoSub in newer versions).
+
+<CodeGroup>
+```ini Define Macro
+[macro-trunkdial]
+exten => s,1,Dial(${ARG1})
+exten => s,n,Goto(s-${DIALSTATUS},1)
+exten => s-NOANSWER,1,Hangup()
+exten => s-BUSY,1,Hangup()
+exten => _s-.,1,NoOp
+```
+
+```ini Use Macro
+[trunkint]
+exten => _9011.,1,Macro(trunkdial,${TRUNK}/${EXTEN:1})
+```
+</CodeGroup>
+
+## SIP Messaging
+
+Handle SIP MESSAGE requests for instant messaging.
+
+```ini
+[mensajes]
+exten => _X.,1,NoOp(Mensaje de ${MESSAGE(from)})
+ same => n,NoOp(Mensaje para ${MESSAGE(to)})
+ same => n,NoOp(Cuerpo del mensaje: ${MESSAGE(body)})
+ same => n,Set(dest=${EXTEN})
+ same => n,Set(remitente=${CUT(MESSAGE(from),<,2)})
+ same => n,Set(remitente=${CUT(remitente,@,1)})
+ same => n,Set(remitente=${CUT(remitente,:,2)})
+ same => n,Set(texto=${MESSAGE(body)})
+ same => n,Set(MESSAGE(body)=${remitente}: ${texto})
+ same => n,MessageSend(sip:${EXTEN}, Centro de Mensajes)
+ same => n,Hangup()
+```
+
+## Hints for Presence
+
+Define extension hints for presence/BLF support.
+
+```ini
+[suscribir]
+exten => 4000,hint,SIP/javier
+exten => 4001,hint,SIP/belen
+```
+
+## Complete Example
+
+```ini extensions.conf
+[general]
+static=yes
+writeprotect=no
+clearglobalvars=no
+
+[globals]
+CONSOLE=Console/dsp
+TRUNK=DAHDI/G2
+TRUNKMSD=1
+
+[empleado]
+; Employee extensions with voicemail
+exten => 4000,1,NoOp(Llamando a Javier)
+ same => n,Dial(SIP/javier,15)
+ same => n,VoiceMail(${EXTEN})
+ same => n,Hangup()
+
+exten => 4001,1,NoOp(Llamando a Belen)
+ same => n,Dial(SIP/belen,15)
+ same => n,VoiceMail(${EXTEN})
+ same => n,Hangup()
+
+; Voicemail access
+exten => *4000,1,VoiceMailMain(4000)
+ same => n,Hangup()
+
+exten => *4001,1,VoiceMailMain(4001)
+ same => n,Hangup()
+
+; Call pickup
+exten => _*8.,1,NoOp(Capturando llamada a la extension ${EXTEN:2})
+ same => n,Pickup(${EXTEN:2})
+ same => n,Hangup()
+
+[entrantes]
+; Ring group
+exten => 4040,1,NoOp(Llamando al grupo 'empleados')
+ same => n,Dial(SIP/javier&SIP/belen,60)
+ same => n,Hangup()
+
+[direccion]
+include => empleado
+
+; Director can pickup any extension
+exten => _*8.,1,NoOp(Capturando llamada a la extension ${EXTEN:2})
+ same => n,Pickup(${EXTEN:2}@empleado)
+ same => n,Hangup()
+
+[suscribir]
+exten => 4000,hint,SIP/javier
+exten => 4001,hint,SIP/belen
+```
+
+## Related Configuration
+
+- [sip.conf](/config/sip-conf) - SIP channel configuration
+- [voicemail.conf](/config/voicemail-conf) - Voicemail settings
+- [queues.conf](/config/queues-conf) - Call queue configuration
+- [features.conf](/config/features-conf) - Call features and transfer settings

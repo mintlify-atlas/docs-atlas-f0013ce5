@@ -1,0 +1,338 @@
+---
+title: 'Call Groups (Llamadas a Grupo)'
+description: 'Configure call distribution to ring multiple extensions simultaneously'
+icon: 'users'
+---
+
+Call groups allow you to ring multiple extensions simultaneously when someone dials a single number. The first person to answer receives the call, making it ideal for department lines or team support numbers.
+
+<Note>
+  This is different from conference calls. With call groups, only ONE person answers - the first to pick up.
+</Note>
+
+## Overview
+
+Call groups enable:
+- Simultaneous ringing on multiple extensions
+- Department or team numbers
+- Fair call distribution (first available answers)
+- Timeout handling if no one answers
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Department extension">
+    Create extension 4040 that rings all Sales department members:
+    - Extension 4000 (Javier)
+    - Extension 4001 (Belen)
+    
+    Anyone calling 4040 reaches the first available sales person.
+  </Accordion>
+
+  <Accordion title="Support hotline">
+    Ring all support staff when customers call the main support number.
+  </Accordion>
+
+  <Accordion title="Emergency contact">
+    Create an extension that rings multiple managers simultaneously.
+  </Accordion>
+</AccordionGroup>
+
+## Configuration
+
+### sip.conf
+
+Add a new user or use existing users. For this example, we add Oscar:
+
+<Accordion title="Add new user">
+  ```ini
+  [oscar]
+  type=friend
+  secret=201097
+  context=entrantes
+  host=dynamic
+  canreinvite=no
+  nat=force_rport,comedia
+  ```
+</Accordion>
+
+**Note:** Oscar is in the `entrantes` context, which will contain the group call logic.
+
+### extensions.conf
+
+Configure the group extension using the `Dial()` application with multiple destinations.
+
+<Steps>
+  <Step title="Create the context">
+    Add or edit the `[entrantes]` context:
+    
+    ```ini
+    [entrantes]
+    ```
+  </Step>
+
+  <Step title="Add group call extension">
+    Use `&` to separate multiple destinations:
+    
+    ```ini
+    exten => 4040,1,NoOp(Llamando al grupo 'empleados')
+    same => n,Dial(SIP/javier&SIP/belen,60)
+    same => n,Hangup()
+    ```
+  </Step>
+
+  <Step title="Reload dialplan">
+    ```
+    CLI> dialplan reload
+    CLI> sip reload
+    ```
+  </Step>
+</Steps>
+
+## Understanding Dial() with Multiple Endpoints
+
+### Syntax
+
+```ini
+Dial(Technology/resource[&Technology2/resource2[&...]][,timeout][,options])
+```
+
+### Examples
+
+<CodeGroup>
+  ```ini Ring two extensions
+  Dial(SIP/javier&SIP/belen,60)
+  ```
+
+  ```ini Ring three extensions
+  Dial(SIP/javier&SIP/belen&SIP/carlos,30)
+  ```
+
+  ```ini Mix technologies
+  Dial(SIP/javier&PJSIP/belen&IAX2/remote,45)
+  ```
+
+  ```ini With options
+  Dial(SIP/javier&SIP/belen,60,tT)
+  ```
+</CodeGroup>
+
+### Parameters
+
+- **Endpoints**: Separated by `&` (ampersand)
+- **Timeout**: Seconds to ring before giving up (60 in example)
+- **Options**: 
+  - `t` - Allow called party to transfer
+  - `T` - Allow calling party to transfer
+  - `m` - Provide music on hold instead of ringing
+  - `r` - Generate ringing tone for caller
+
+## Complete Configuration Example
+
+<Accordion title="Full extensions.conf example">
+  ```ini
+  [general]
+  static=yes
+  writeprotect=no
+
+  [empleado]
+  ;-----Extensiones habilitadas-----
+  exten => 4000,1,NoOp(Llamando a Javier)
+  same => n,Dial(SIP/javier,15)
+  same => n,VoiceMail(${EXTEN})
+  same => n,Hangup()
+
+  exten => 4001,1,NoOp(Llamando a Belen)
+  same => n,Dial(SIP/belen,15)
+  same => n,VoiceMail(${EXTEN})
+  same => n,Hangup()
+
+  ;-----Buzones de voz-----
+  exten => *4000,1,VoiceMailMain(4000)
+  same => n,Hangup()
+
+  exten => *4001,1,VoiceMailMain(4001)
+  same => n,Hangup()
+
+  [entrantes]
+  exten => 4040,1,NoOp(Llamando al grupo 'empleados')
+  same => n,Dial(SIP/javier&SIP/belen,60)
+  same => n,Hangup()
+  ```
+</Accordion>
+
+## How It Works
+
+<Steps>
+  <Step title="Call initiated">
+    Oscar dials 4040 from his phone.
+  </Step>
+
+  <Step title="Simultaneous ring">
+    Both Javier's phone (4000) and Belen's phone (4001) ring at the same time.
+  </Step>
+
+  <Step title="First answer wins">
+    Belen answers first. Her phone connects to Oscar.
+  </Step>
+
+  <Step title="Other phones stop ringing">
+    Javier's phone immediately stops ringing.
+  </Step>
+
+  <Step title="Timeout handling">
+    If no one answers within 60 seconds, the call hangs up.
+  </Step>
+</Steps>
+
+## Console Output Example
+
+```
+== Setting global variable 'SIPDOMAIN' to '192.168.1.180'
+  -- Executing [4040@entrantes:1] NoOp("SIP/oscar-00000003", "Llamando al grupo 'empleados'") in new stack
+  -- Executing [4040@entrantes:2] Dial("SIP/oscar-00000003", "SIP/javier&SIP/belen,60") in new stack
+  -- Called SIP/javier
+  -- Called SIP/belen
+  -- SIP/javier-00000004 is ringing
+  -- SIP/belen-00000005 is ringing
+  -- SIP/belen-00000005 answered SIP/oscar-00000003
+  -- Executing [4040@entrantes:3] Hangup("SIP/oscar-00000003", "") in new stack
+```
+
+## Advanced Configuration
+
+### Adding Fallback to Voicemail
+
+If no one answers, send to a group voicemail:
+
+```ini
+exten => 4040,1,NoOp(Llamando al grupo 'empleados')
+same => n,Dial(SIP/javier&SIP/belen,60)
+same => n,VoiceMail(4040@default)
+same => n,Hangup()
+```
+
+### Playing Music While Ringing
+
+```ini
+exten => 4040,1,NoOp(Llamando al grupo 'empleados')
+same => n,Dial(SIP/javier&SIP/belen,60,m)
+same => n,Hangup()
+```
+
+The `m` option plays music on hold instead of ringing tone.
+
+### Adding Announcements
+
+```ini
+exten => 4040,1,NoOp(Llamando al grupo 'empleados')
+same => n,Answer()
+same => n,Playback(please-hold)
+same => n,Dial(SIP/javier&SIP/belen,60,m)
+same => n,VoiceMail(4040@default)
+same => n,Hangup()
+```
+
+### Ring Different Groups in Sequence
+
+```ini
+exten => 4040,1,NoOp(Grupo de soporte - Nivel 1)
+same => n,Dial(SIP/javier&SIP/belen,20)
+same => n,NoOp(Escalando a Nivel 2)
+same => n,Dial(SIP/supervisor&SIP/manager,20)
+same => n,VoiceMail(4040@default)
+same => n,Hangup()
+```
+
+## Testing
+
+<Steps>
+  <Step title="Verify user registration">
+    Check all users are registered:
+    ```
+    CLI> sip show peers
+    ```
+    
+    Expected output:
+    ```
+    Name/username    Host            Dyn Forcerport ACL Port     Status
+    javier           192.168.1.100   D  Yes           5060     OK (15 ms)
+    belen            192.168.1.101   D  Yes           5060     OK (12 ms)
+    oscar            192.168.1.102   D  Yes           5060     OK (18 ms)
+    ```
+  </Step>
+
+  <Step title="Test group call">
+    From Oscar's phone:
+    1. Dial 4040
+    2. Observe both Javier and Belen's phones ringing
+    3. Have one person answer
+    4. Verify the other phone stops ringing
+  </Step>
+
+  <Step title="Test timeout">
+    1. Dial 4040
+    2. Don't answer
+    3. Wait 60 seconds
+    4. Call should automatically hang up
+  </Step>
+</Steps>
+
+## Dynamic Group Membership
+
+For more flexible group management, use variables:
+
+```ini
+[globals]
+GRUPO_VENTAS=SIP/javier&SIP/belen&SIP/carlos
+GRUPO_SOPORTE=SIP/tech1&SIP/tech2
+
+[entrantes]
+exten => 4040,1,NoOp(Llamando a ventas)
+same => n,Dial(${GRUPO_VENTAS},60)
+same => n,Hangup()
+
+exten => 4050,1,NoOp(Llamando a soporte)
+same => n,Dial(${GRUPO_SOPORTE},60)
+same => n,Hangup()
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Only one phone rings">
+    - Check syntax uses `&` not `,` between extensions
+    - Verify both users are registered: `CLI> sip show peers`
+    - Check for typos in SIP peer names
+    - Review console output for errors
+  </Accordion>
+
+  <Accordion title="Call immediately ends">
+    - Verify context permissions
+    - Check that extensions exist in the dialplan
+    - Ensure timeout value is reasonable (> 10 seconds)
+    - Look for `Dial` errors in console
+  </Accordion>
+
+  <Accordion title="Can't dial into group from certain contexts">
+    - Verify caller's context has access to `[entrantes]`
+    - Add `include => entrantes` to caller's context if needed
+    - Check that NAT settings are correct in sip.conf
+  </Accordion>
+</AccordionGroup>
+
+## Performance Considerations
+
+<Note>
+  - Each simultaneous ring consumes bandwidth and server resources
+  - Limit groups to reasonable sizes (5-10 members typically)
+  - For larger call centers, use queue functionality instead
+  - Monitor system load with: `CLI> core show channels`
+</Note>
+
+## Next Steps
+
+- Set up [Call Pickup](/features/call-pickup) to answer calls ringing on other extensions
+- Configure [Voicemail](/features/voicemail) for group mailboxes
+- Learn about [Call Queues](/features/call-queues) for advanced call distribution
+- Implement [Ring Strategies](/features/call-queues) for sequential ringing
