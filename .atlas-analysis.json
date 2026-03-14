@@ -1,0 +1,130 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "Asterisk Tutorial",
+  "projectDescription": "Comprehensive guide for installing, configuring, and deploying Asterisk PBX with advanced telephony features",
+  "theme": "aspen",
+  "primaryColor": "#ee7924",
+  "lightColor": "#8e7a69",
+  "darkColor": "#dcd5cc",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Installation & Setup",
+            "pages": [
+              "setup/ssh-connection",
+              "setup/static-ip",
+              "setup/asterisk-installation",
+              "setup/user-creation",
+              "setup/language-configuration"
+            ]
+          },
+          {
+            "group": "PBX Features",
+            "pages": [
+              "features/voicemail",
+              "features/call-transfer",
+              "features/sip-messaging",
+              "features/call-groups",
+              "features/call-pickup",
+              "features/text-to-speech",
+              "features/call-security",
+              "features/external-calls",
+              "features/business-hours",
+              "features/logging",
+              "features/call-queues"
+            ]
+          },
+          {
+            "group": "Database Integration",
+            "pages": [
+              "database/mariadb-installation",
+              "database/odbc-connector",
+              "database/asterisk-connection"
+            ]
+          },
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "advanced/pbx-interconnection",
+              "advanced/dundi-protocol",
+              "advanced/call-center-example"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "resources/softphones",
+              "resources/troubleshooting",
+              "resources/useful-links"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Configuration Reference",
+        "groups": [
+          {
+            "group": "Configuration Files",
+            "pages": [
+              "config/sip-conf",
+              "config/extensions-conf",
+              "config/voicemail-conf",
+              "config/queues-conf",
+              "config/features-conf",
+              "config/dundi-conf",
+              "config/festival-conf"
+            ]
+          },
+          {
+            "group": "Dialplan",
+            "pages": [
+              "dialplan/overview",
+              "dialplan/contexts",
+              "dialplan/extensions",
+              "dialplan/applications",
+              "dialplan/variables"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Complete Asterisk PBX installation on Debian",
+    "Voicemail and call transfer functionality",
+    "SIP messaging and call distribution",
+    "Call pickup and group calling",
+    "Text-to-speech with Festival",
+    "TLS encryption for secure calls",
+    "MariaDB database integration",
+    "ODBC connector configuration",
+    "DUNDi protocol for PBX interconnection",
+    "Call center implementation example",
+    "Business hours and call routing",
+    "Queue management and call distribution"
+  ],
+  "publicApiSurface": [
+    "SIP protocol endpoints (port 5060)",
+    "TLS encrypted connections",
+    "Extension dialing patterns (4XXX, 2XXX, etc.)",
+    "Voicemail access (*extension)",
+    "Call pickup (*8extension)",
+    "Group calling (X00 extensions)",
+    "External number dialing",
+    "DUNDi peering (99999XXXX)",
+    "Queue management commands",
+    "Database ODBC queries",
+    "Festival TTS integration",
+    "CLI management commands"
+  ]
+}
